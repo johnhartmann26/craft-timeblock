@@ -1,8 +1,9 @@
 // Craft TimeBlock - JavaScript
+// Main application logic
 
+document.addEventListener('DOMContentLoaded', () => {
     // Constants
     const STORAGE_KEY = 'craft-timeblock-api';
-    const THEME_KEY = 'craft-timeblock-theme';
     const TIME_SETTINGS_KEY = 'craft-timeblock-times';
     const HOUR_HEIGHT = 60; // pixels per hour
 
@@ -13,23 +14,23 @@
 
     // State
     let apiUrl = '';
-    let currentTheme = 'dark';
+    // REMOVED: currentTheme variable
     let nowLineInterval = null;
     let hoveredBlock = null;
-    let scheduledBlocks = []; // Store blocks with IDs for updates
-    let unscheduledBlocks = []; // Store unscheduled items with IDs for updates
+    let scheduledBlocks = []; 
+    let unscheduledBlocks = [];
     let hoveredUnscheduledItem = null;
-    let currentDragDuration = 1; // Duration of block being dragged (default 1 hour)
-    let currentDragOffset = 0; // Y offset of mouse within dragged block
+    let currentDragDuration = 1; 
+    let currentDragOffset = 0; 
 
     // Touch drag state
-    let touchDragData = null; // Data for the item being touch-dragged
-    let touchDragGhost = null; // Visual ghost element during touch drag
-    let touchDragSource = null; // The original element being dragged
-    let touchStartY = 0; // Starting Y position for swipe detection
+    let touchDragData = null; 
+    let touchDragGhost = null; 
+    let touchDragSource = null; 
+    let touchStartY = 0; 
 
     // Date navigation state
-    let currentDate = new Date(); // Currently viewed date
+    let currentDate = new Date(); 
 
     // DOM Elements
     const setupScreen = document.getElementById('setup-screen');
@@ -59,15 +60,12 @@
     const settingsApiUrl = document.getElementById('settings-api-url');
     const settingsStartHour = document.getElementById('settings-start-hour');
     const settingsEndHour = document.getElementById('settings-end-hour');
-    const themeBtns = document.querySelectorAll('.theme-btn');
+    // REMOVED: themeBtns selector
 
     // Initialize
     function init() {
-      // Load and apply theme first (before any visual rendering)
-      const savedTheme = localStorage.getItem(THEME_KEY);
-      currentTheme = savedTheme || 'dark';
-      applyTheme(currentTheme);
-
+      // REMOVED: All theme logic (applyTheme, currentTheme, etc.)
+      
       // Load time settings
       loadTimeSettings();
       populateTimeSelects();
@@ -177,31 +175,7 @@
       loadSchedule();
     }
 
-    // Theme
-    function applyTheme(theme) {
-      currentTheme = theme;
-      if (theme === 'light') {
-        document.documentElement.setAttribute('data-theme', 'light');
-      } else {
-        document.documentElement.removeAttribute('data-theme');
-      }
-      updateThemeButtons();
-    }
-
-    function updateThemeButtons() {
-      themeBtns.forEach(btn => {
-        if (btn.dataset.theme === currentTheme) {
-          btn.classList.add('active');
-        } else {
-          btn.classList.remove('active');
-        }
-      });
-    }
-
-    function setTheme(theme) {
-      applyTheme(theme);
-      localStorage.setItem(THEME_KEY, theme);
-    }
+    // REMOVED: applyTheme, updateThemeButtons, setTheme functions
 
     function setupEventListeners() {
       setupForm.addEventListener('submit', handleSetup);
@@ -238,12 +212,7 @@
         }
       });
 
-      // Theme buttons
-      themeBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-          setTheme(btn.dataset.theme);
-        });
-      });
+      // REMOVED: themeBtns event listeners (handled in theme.js now)
     }
 
     // Setup
@@ -439,15 +408,9 @@
       const unscheduledItems = [];
 
       // Time pattern: flexible for 12/24 hour formats
-      // Handles: `10:00 AM - 11:00 AM` - Task, 10 AM - 11 AM Task, 10-11 AM: Task
-      // Separators: -, –, —, to, ->
-      // Task separators: -, :, or just space
-      // Minutes optional (defaults to :00)
-      // Shared AM/PM: "10-11 AM" means both 10 AM and 11 AM
       const timePattern = /^`?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:[-–—]+|to|->|→)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?`?\s*(?:[-–—:]|\s)\s*(.+)$/i;
 
       // Task with time pattern: - [x] `1:00 PM - 2:00 PM` Task name
-      // Same flexibility as timePattern
       const taskWithTimePattern = /^-?\s*\[([ x]?)\]\s*`?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:[-–—]+|to|->|→)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?`?\s*(?:[-–—:]|\s)\s*(.+)$/i;
 
       function processText(text, highlight = null, blockId = null, originalMarkdown = null) {
@@ -2552,3 +2515,4 @@
 
     // Start
     init();
+});

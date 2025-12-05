@@ -1966,13 +1966,26 @@
 
         topHandle.addEventListener('mousedown', (e) => {
           e.stopPropagation();
-          startResize(el, e, 'top');
+          startResize(el, e, 'top', false);
         });
 
         bottomHandle.addEventListener('mousedown', (e) => {
           e.stopPropagation();
-          startResize(el, e, 'bottom');
+          startResize(el, e, 'bottom', false);
         });
+
+        // Touch resize for mobile
+        topHandle.addEventListener('touchstart', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          startResize(el, e, 'top', true);
+        }, { passive: false });
+
+        bottomHandle.addEventListener('touchstart', (e) => {
+          e.stopPropagation();
+          e.preventDefault();
+          startResize(el, e, 'bottom', true);
+        }, { passive: false });
 
         // Checkbox handler for task timeblocks
         const checkbox = el.querySelector('.timeblock-checkbox');
@@ -2167,17 +2180,19 @@
     }
 
     // Resize functionality
-    function startResize(el, e, edge) {
+    function startResize(el, e, edge, isTouch = false) {
       e.preventDefault();
       el.classList.add('resizing');
 
-      const startY = e.clientY;
+      const startY = isTouch ? e.touches[0].clientY : e.clientY;
       const startTop = parseFloat(el.style.top);
       const startHeight = parseFloat(el.style.height);
       const minHeight = 15; // 15 minutes minimum
 
-      function onMouseMove(e) {
-        const deltaY = e.clientY - startY;
+      function onMove(e) {
+        if (isTouch) e.preventDefault();
+        const currentY = isTouch ? e.touches[0].clientY : e.clientY;
+        const deltaY = currentY - startY;
         let newTop = startTop;
         let newHeight = startHeight;
 
@@ -2224,10 +2239,16 @@
         }
       }
 
-      function onMouseUp() {
+      function onEnd() {
         el.classList.remove('resizing');
-        document.removeEventListener('mousemove', onMouseMove);
-        document.removeEventListener('mouseup', onMouseUp);
+        if (isTouch) {
+          document.removeEventListener('touchmove', onMove);
+          document.removeEventListener('touchend', onEnd);
+          document.removeEventListener('touchcancel', onEnd);
+        } else {
+          document.removeEventListener('mousemove', onMove);
+          document.removeEventListener('mouseup', onEnd);
+        }
 
         // Calculate new times and update
         const newTop = parseFloat(el.style.top);
@@ -2238,8 +2259,14 @@
         updateBlockTime(el, newStart, newEnd);
       }
 
-      document.addEventListener('mousemove', onMouseMove);
-      document.addEventListener('mouseup', onMouseUp);
+      if (isTouch) {
+        document.addEventListener('touchmove', onMove, { passive: false });
+        document.addEventListener('touchend', onEnd);
+        document.addEventListener('touchcancel', onEnd);
+      } else {
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onEnd);
+      }
     }
 
     // Sync status indicator

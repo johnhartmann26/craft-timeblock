@@ -449,6 +449,29 @@
       z-index: 100;
     }
 
+    /* Inline Edit Mode */
+    .timeblock.editing {
+      z-index: 50;
+      cursor: default;
+    }
+
+    .timeblock-title-input {
+      background: transparent;
+      border: none;
+      outline: none;
+      font-weight: 500;
+      font-size: 0.875rem;
+      color: var(--text);
+      width: 100%;
+      padding: 0;
+      margin: 0;
+      font-family: inherit;
+    }
+
+    .timeblock-title-input::placeholder {
+      color: var(--text-subtle);
+    }
+
     /* Unscheduled Section */
     .unscheduled {
       margin-top: 2rem;
@@ -466,6 +489,9 @@
     }
 
     .unscheduled-item {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
       padding: 0.625rem 0.875rem;
       background: var(--card-default);
       border: 1px solid var(--card-border);
@@ -473,6 +499,66 @@
       margin-bottom: 0.5rem;
       font-size: 0.875rem;
       color: var(--text);
+    }
+
+    .unscheduled-checkbox {
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      flex-shrink: 0;
+      position: relative;
+      transition: all 0.15s;
+    }
+
+    .unscheduled-checkbox:hover {
+      border-color: var(--text-muted);
+    }
+
+    .unscheduled-checkbox:checked::after {
+      content: '';
+      position: absolute;
+      left: 5px;
+      top: 1px;
+      width: 5px;
+      height: 10px;
+      border: solid var(--border);
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+
+    .unscheduled-text {
+      flex: 1;
+    }
+
+    .unscheduled-item.checked .unscheduled-text {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+
+    .unscheduled-item.hovered {
+      outline: 1px solid var(--text-subtle);
+      outline-offset: -1px;
+    }
+
+    .unscheduled-item.editing {
+      padding: 0.5rem 0.875rem;
+    }
+
+    .unscheduled-input {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      font-size: 0.875rem;
+      color: var(--text);
+      font-family: inherit;
+    }
+
+    .unscheduled-input::placeholder {
+      color: var(--text-subtle);
     }
 
     /* Loading / Error States */
@@ -750,6 +836,8 @@
     let nowLineInterval = null;
     let hoveredBlock = null;
     let scheduledBlocks = []; // Store blocks with IDs for updates
+    let unscheduledBlocks = []; // Store unscheduled items with IDs for updates
+    let hoveredUnscheduledItem = null;
 
     // DOM Elements
     const setupScreen = document.getElementById('setup-screen');
@@ -970,6 +1058,7 @@
         const { scheduled, unscheduledItems } = parseBlocks(data);
 
         scheduledBlocks = scheduled; // Store for updates
+        unscheduledBlocks = unscheduledItems; // Store for updates
         renderTimeline(scheduled);
         renderUnscheduled(unscheduledItems);
         startNowLineUpdates();
@@ -1046,9 +1135,15 @@
           }
         } else {
           // Check if it's a checkbox/todo item
-          const todoMatch = trimmed.match(/^-?\s*\[[ x]?\]\s*(.+)$/i);
+          const todoMatch = trimmed.match(/^-?\s*\[([ x]?)\]\s*(.+)$/i);
           if (todoMatch) {
-            unscheduledItems.push(todoMatch[1].trim());
+            const isChecked = todoMatch[1].toLowerCase() === 'x';
+            unscheduledItems.push({
+              id: blockId,
+              text: todoMatch[2].trim(),
+              checked: isChecked,
+              originalMarkdown: originalMarkdown || trimmed
+            });
           }
         }
       }
@@ -1074,7 +1169,15 @@
           if (block.listStyle === 'todo' || block.listStyle === 'checkbox') {
             const text = block.markdown.replace(/^-?\s*\[[ x]?\]\s*/i, '').trim();
             if (text && !text.match(timePattern)) {
-              unscheduledItems.push(text);
+              // Check taskInfo for done state, or parse [x] from markdown
+              const isChecked = block.taskInfo?.state === 'done' ||
+                                /^-?\s*\[x\]/i.test(block.markdown);
+              unscheduledItems.push({
+                id: blockId,
+                text: text,
+                checked: isChecked,
+                originalMarkdown: block.markdown
+              });
               return; // Don't process further
             }
           }
@@ -1357,14 +1460,93 @@
       }
 
       unscheduledList.innerHTML = '';
-      items.forEach(item => {
+      items.forEach((item, index) => {
         const el = document.createElement('div');
-        el.className = 'unscheduled-item';
-        el.textContent = item;
+        el.className = 'unscheduled-item' + (item.checked ? ' checked' : '');
+        el.dataset.index = index;
+        if (item.id) el.dataset.blockId = item.id;
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'unscheduled-checkbox';
+        checkbox.checked = item.checked;
+        checkbox.addEventListener('change', () => toggleUnscheduledItem(index, checkbox.checked));
+
+        const text = document.createElement('span');
+        text.className = 'unscheduled-text';
+        text.textContent = item.text;
+
+        // Hover tracking for delete
+        el.addEventListener('mouseenter', () => {
+          hoveredUnscheduledItem = el;
+          el.classList.add('hovered');
+        });
+        el.addEventListener('mouseleave', () => {
+          if (hoveredUnscheduledItem === el) hoveredUnscheduledItem = null;
+          el.classList.remove('hovered');
+        });
+
+        el.appendChild(checkbox);
+        el.appendChild(text);
         unscheduledList.appendChild(el);
       });
 
       unscheduled.classList.remove('hidden');
+    }
+
+    // Toggle unscheduled item checkbox
+    async function toggleUnscheduledItem(index, checked) {
+      const item = unscheduledBlocks[index];
+      if (!item || !item.id) {
+        console.warn('Cannot update item: no block ID');
+        return;
+      }
+
+      // Update local state
+      item.checked = checked;
+
+      // Update UI immediately
+      const el = unscheduledList.querySelector(`[data-index="${index}"]`);
+      if (el) {
+        el.classList.toggle('checked', checked);
+      }
+
+      // Build new markdown
+      const checkMark = checked ? 'x' : ' ';
+      const newMarkdown = `- [${checkMark}] ${item.text}`;
+
+      showSyncStatus('saving', 'Updating...');
+
+      try {
+        const response = await fetch(`${apiUrl}/blocks`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            blocks: [{
+              id: item.id,
+              markdown: newMarkdown
+            }]
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update: ${response.status}`);
+        }
+
+        item.originalMarkdown = newMarkdown;
+        showSyncStatus('saved', 'Updated');
+      } catch (err) {
+        console.error('Failed to update item:', err);
+        showSyncStatus('error', 'Update failed');
+        // Revert UI on error
+        item.checked = !checked;
+        if (el) {
+          el.classList.toggle('checked', !checked);
+          el.querySelector('.unscheduled-checkbox').checked = !checked;
+        }
+      }
     }
 
     // Interactions: Drag, Resize, Delete
@@ -1410,10 +1592,70 @@
     }
 
     function handleKeydown(e) {
-      if ((e.key === 'Delete' || e.key === 'Backspace') && hoveredBlock) {
-        // Prevent backspace from navigating back
-        e.preventDefault();
-        deleteBlock(hoveredBlock);
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        // Don't delete if typing in an input
+        if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+          return;
+        }
+
+        if (hoveredBlock) {
+          e.preventDefault();
+          deleteBlock(hoveredBlock);
+        } else if (hoveredUnscheduledItem) {
+          e.preventDefault();
+          deleteUnscheduledItem(hoveredUnscheduledItem);
+        }
+      }
+    }
+
+    // Delete unscheduled item
+    async function deleteUnscheduledItem(el) {
+      const index = parseInt(el.dataset.index);
+      const item = unscheduledBlocks[index];
+
+      if (!item || !item.id) {
+        console.warn('Cannot delete item: no block ID');
+        return;
+      }
+
+      showSyncStatus('saving', 'Deleting...');
+
+      try {
+        const response = await fetch(`${apiUrl}/blocks`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            blockIds: [item.id]
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to delete: ${response.status}`);
+        }
+
+        // Remove from DOM
+        el.remove();
+
+        // Remove from local state
+        unscheduledBlocks.splice(index, 1);
+
+        // Update indices on remaining items
+        unscheduledList.querySelectorAll('.unscheduled-item').forEach((item, i) => {
+          item.dataset.index = i;
+        });
+
+        // Hide section if empty
+        if (unscheduledBlocks.length === 0) {
+          unscheduled.classList.add('hidden');
+        }
+
+        hoveredUnscheduledItem = null;
+        showSyncStatus('saved', 'Deleted');
+      } catch (err) {
+        console.error('Failed to delete item:', err);
+        showSyncStatus('error', 'Delete failed');
       }
     }
 
@@ -1679,6 +1921,293 @@
         showSyncStatus('error', 'Delete failed');
       }
     }
+
+    // Click-to-Create on Timeline
+    let editingBlock = null;
+
+    function formatTimeForMarkdown(hour24, min) {
+      const period = hour24 >= 12 ? 'PM' : 'AM';
+      const displayHour = hour24 > 12 ? hour24 - 12 : (hour24 === 0 ? 12 : hour24);
+      return `${displayHour}:${min.toString().padStart(2, '0')} ${period}`;
+    }
+
+    function createInlineTimeblock(startDecimal) {
+      // Remove any existing editing block
+      if (editingBlock) {
+        editingBlock.remove();
+        editingBlock = null;
+      }
+
+      const endDecimal = startDecimal + 1; // 1 hour duration
+      const top = (startDecimal - START_HOUR) * HOUR_HEIGHT;
+      const height = HOUR_HEIGHT; // 1 hour
+
+      const el = document.createElement('div');
+      el.className = 'timeblock default editing';
+
+      el.style.top = `${top}px`;
+      el.style.height = `${height}px`;
+
+      const startHour = Math.floor(startDecimal);
+      const startMin = Math.round((startDecimal - startHour) * 60);
+      const endHour = Math.floor(endDecimal);
+      const endMin = Math.round((endDecimal - endHour) * 60);
+
+      el.innerHTML = `
+        <div class="timeblock-time">${formatTimeRange(startDecimal, endDecimal)}</div>
+        <input class="timeblock-title-input" placeholder="What's happening?" data-start="${startDecimal}" data-end="${endDecimal}">
+      `;
+
+      timelineTrack.appendChild(el);
+      editingBlock = el;
+
+      const input = el.querySelector('.timeblock-title-input');
+      input.focus();
+
+      // Handle keyboard events
+      input.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          await saveInlineTimeblock(input);
+        } else if (e.key === 'Escape') {
+          cancelInlineTimeblock();
+        }
+      });
+
+      // Handle blur (click outside)
+      input.addEventListener('blur', async () => {
+        // Small delay to allow for intentional clicks
+        setTimeout(async () => {
+          if (editingBlock && editingBlock.contains(input)) {
+            const title = input.value.trim();
+            if (title) {
+              await saveInlineTimeblock(input);
+            } else {
+              cancelInlineTimeblock();
+            }
+          }
+        }, 100);
+      });
+    }
+
+    async function saveInlineTimeblock(input) {
+      const title = input.value.trim();
+      if (!title) {
+        cancelInlineTimeblock();
+        return;
+      }
+
+      const startDecimal = parseFloat(input.dataset.start);
+      const endDecimal = parseFloat(input.dataset.end);
+
+      const startHour = Math.floor(startDecimal);
+      const startMin = Math.round((startDecimal - startHour) * 60);
+      const endHour = Math.floor(endDecimal);
+      const endMin = Math.round((endDecimal - endHour) * 60);
+
+      const startStr = formatTimeForMarkdown(startHour, startMin);
+      const endStr = formatTimeForMarkdown(endHour, endMin);
+      const markdown = `\`${startStr} - ${endStr}\` - ${title}`;
+
+      // Remove the editing block
+      if (editingBlock) {
+        editingBlock.remove();
+        editingBlock = null;
+      }
+
+      showSyncStatus('saving', 'Creating...');
+
+      try {
+        const response = await fetch(`${apiUrl}/blocks`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            blocks: [{
+              type: 'text',
+              markdown: markdown
+            }],
+            position: {
+              position: 'end',
+              date: 'today'
+            }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to create: ${response.status}`);
+        }
+
+        showSyncStatus('saved', 'Created');
+        loadSchedule();
+      } catch (err) {
+        console.error('Failed to create block:', err);
+        showSyncStatus('error', 'Create failed');
+      }
+    }
+
+    function cancelInlineTimeblock() {
+      if (editingBlock) {
+        editingBlock.remove();
+        editingBlock = null;
+      }
+    }
+
+    // Click handler for timeline track
+    timelineTrack.addEventListener('click', (e) => {
+      // Ignore clicks on existing timeblocks or their children
+      if (e.target.closest('.timeblock') && !e.target.closest('.timeblock.editing')) {
+        return;
+      }
+
+      // Ignore if clicking on now-line
+      if (e.target.closest('.now-line')) {
+        return;
+      }
+
+      // Calculate time from click position
+      const rect = timelineTrack.getBoundingClientRect();
+      const y = e.clientY - rect.top;
+
+      // Convert to time (snap to 15-minute intervals)
+      let startDecimal = y / HOUR_HEIGHT + START_HOUR;
+      startDecimal = Math.round(startDecimal * 4) / 4; // Snap to 15 min
+
+      // Clamp to valid range
+      startDecimal = Math.max(START_HOUR, Math.min(END_HOUR - 1, startDecimal));
+
+      createInlineTimeblock(startDecimal);
+    });
+
+    // Spacebar handler for creating unscheduled tasks
+    let editingUnscheduledItem = null;
+
+    function createInlineUnscheduledTask() {
+      // Remove any existing editing item
+      if (editingUnscheduledItem) {
+        editingUnscheduledItem.remove();
+        editingUnscheduledItem = null;
+      }
+
+      // Ensure unscheduled section is visible
+      unscheduled.classList.remove('hidden');
+
+      const el = document.createElement('div');
+      el.className = 'unscheduled-item editing';
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.className = 'unscheduled-checkbox';
+      checkbox.disabled = true;
+
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'unscheduled-input';
+      input.placeholder = 'New task...';
+
+      el.appendChild(checkbox);
+      el.appendChild(input);
+
+      // Add at the top of the list
+      unscheduledList.insertBefore(el, unscheduledList.firstChild);
+      editingUnscheduledItem = el;
+      input.focus();
+
+      // Handle keyboard events
+      input.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          await saveInlineUnscheduledTask(input);
+        } else if (e.key === 'Escape') {
+          cancelInlineUnscheduledTask();
+        }
+      });
+
+      // Handle blur
+      input.addEventListener('blur', async () => {
+        setTimeout(async () => {
+          if (editingUnscheduledItem && editingUnscheduledItem.contains(input)) {
+            const title = input.value.trim();
+            if (title) {
+              await saveInlineUnscheduledTask(input);
+            } else {
+              cancelInlineUnscheduledTask();
+            }
+          }
+        }, 100);
+      });
+    }
+
+    async function saveInlineUnscheduledTask(input) {
+      const title = input.value.trim();
+      if (!title) {
+        cancelInlineUnscheduledTask();
+        return;
+      }
+
+      // Remove the editing item
+      if (editingUnscheduledItem) {
+        editingUnscheduledItem.remove();
+        editingUnscheduledItem = null;
+      }
+
+      const markdown = `- [ ] ${title}`;
+
+      showSyncStatus('saving', 'Creating...');
+
+      try {
+        const response = await fetch(`${apiUrl}/blocks`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            blocks: [{
+              type: 'text',
+              markdown: markdown
+            }],
+            position: {
+              position: 'end',
+              date: 'today'
+            }
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to create: ${response.status}`);
+        }
+
+        showSyncStatus('saved', 'Created');
+        loadSchedule();
+      } catch (err) {
+        console.error('Failed to create task:', err);
+        showSyncStatus('error', 'Create failed');
+      }
+    }
+
+    function cancelInlineUnscheduledTask() {
+      if (editingUnscheduledItem) {
+        editingUnscheduledItem.remove();
+        editingUnscheduledItem = null;
+      }
+      // Hide unscheduled section if empty
+      if (unscheduledBlocks.length === 0 && !editingUnscheduledItem) {
+        unscheduled.classList.add('hidden');
+      }
+    }
+
+    // Global spacebar handler
+    document.addEventListener('keydown', (e) => {
+      const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
+      const modalOpen = !settingsModal.classList.contains('hidden');
+      const appVisible = !app.classList.contains('hidden');
+
+      if (e.key === ' ' && !isTyping && !modalOpen && appVisible) {
+        e.preventDefault();
+        createInlineUnscheduledTask();
+      }
+    });
 
     // Start
     init();

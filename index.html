@@ -446,6 +446,19 @@
       opacity: 0.3;
     }
 
+    /* Larger touch targets for mobile */
+    @media (pointer: coarse) {
+      .resize-handle {
+        height: 24px;
+      }
+      .resize-handle-top {
+        top: -12px;
+      }
+      .resize-handle-bottom {
+        bottom: -12px;
+      }
+    }
+
     .timeblock.resizing {
       z-index: 100;
     }

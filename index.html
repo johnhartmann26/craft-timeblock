@@ -472,6 +472,47 @@
       color: var(--text-subtle);
     }
 
+    /* Timeblock with checkbox (task timeblock) */
+    .timeblock-content {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.5rem;
+    }
+
+    .timeblock-checkbox {
+      appearance: none;
+      width: 16px;
+      height: 16px;
+      border: 2px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      flex-shrink: 0;
+      position: relative;
+      margin-top: 1px;
+      transition: all 0.15s;
+    }
+
+    .timeblock-checkbox:hover {
+      border-color: var(--text-muted);
+    }
+
+    .timeblock-checkbox:checked::after {
+      content: '';
+      position: absolute;
+      left: 4px;
+      top: 0px;
+      width: 4px;
+      height: 9px;
+      border: solid var(--border);
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+    }
+
+    .timeblock.checked .timeblock-title {
+      text-decoration: line-through;
+      color: var(--text-muted);
+    }
+
     /* Unscheduled Section */
     .unscheduled {
       margin-top: 2rem;
@@ -559,6 +600,63 @@
 
     .unscheduled-input::placeholder {
       color: var(--text-subtle);
+    }
+
+    /* Draggable unscheduled items */
+    .unscheduled-item {
+      cursor: grab;
+    }
+
+    .unscheduled-item.dragging {
+      opacity: 0.5;
+      cursor: grabbing;
+    }
+
+    .unscheduled-item.editing {
+      cursor: default;
+    }
+
+    /* Drop zone indicator on timeline */
+    .timeline-track.drag-over {
+      background: linear-gradient(
+        to bottom,
+        transparent,
+        rgba(217, 119, 87, 0.1),
+        transparent
+      );
+    }
+
+    .drop-indicator {
+      position: absolute;
+      left: 12px;
+      right: 12px;
+      height: 60px;
+      background: var(--card-default);
+      border: 2px dashed var(--accent);
+      border-radius: 6px;
+      pointer-events: none;
+      opacity: 0.8;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+    }
+
+    /* Unscheduled section as drop zone */
+    .unscheduled.drag-over {
+      background: rgba(217, 119, 87, 0.05);
+      border-radius: 8px;
+    }
+
+    .unscheduled-drop-indicator {
+      padding: 0.75rem;
+      border: 2px dashed var(--accent);
+      border-radius: 6px;
+      margin-bottom: 0.5rem;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.75rem;
     }
 
     /* Loading / Error States */
@@ -1100,7 +1198,10 @@
       // Handles: `10:00 AM - 11:00 AM` - Task (backticks wrap entire time range)
       // Or: 9:00 AM - 10:00 AM - Task (without backticks)
       // Or: 14:00 - 15:30 - Task (24-hour)
-      const timePattern = /^`?(\d{1,2}):(\d{2})\s*(am|pm)?\s*[-–—]+\s*(\d{1,2}):(\d{2})\s*(am|pm)?`?\s*[-–—]+\s*(.+)$/i;
+      const timePattern = /^`?(\d{1,2}):(\d{2})\s*(am|pm)?\s*[-–—]+\s*(\d{1,2}):(\d{2})\s*(am|pm)?`?\s*[-–—]?\s*(.*)$/i;
+
+      // Task with time pattern: - [x] `1:00 PM - 2:00 PM` Task name
+      const taskWithTimePattern = /^-?\s*\[([ x]?)\]\s*`?(\d{1,2}):(\d{2})\s*(am|pm)?\s*[-–—]+\s*(\d{1,2}):(\d{2})\s*(am|pm)?`?\s*(.*)$/i;
 
       function processText(text, highlight = null, blockId = null, originalMarkdown = null) {
         if (!text || typeof text !== 'string') return;
@@ -1115,14 +1216,15 @@
           trimmed = highlightMatch[2].trim(); // The content inside
         }
 
-        const match = trimmed.match(timePattern);
+        // First check for task with time (checkbox + time)
+        const taskWithTimeMatch = trimmed.match(taskWithTimePattern);
+        if (taskWithTimeMatch) {
+          const isChecked = taskWithTimeMatch[1].toLowerCase() === 'x';
+          const startHour = parseTime(taskWithTimeMatch[2], taskWithTimeMatch[3], taskWithTimeMatch[4]);
+          const endHour = parseTime(taskWithTimeMatch[5], taskWithTimeMatch[6], taskWithTimeMatch[7]);
+          const title = taskWithTimeMatch[8].trim();
 
-        if (match) {
-          const startHour = parseTime(match[1], match[2], match[3]);
-          const endHour = parseTime(match[4], match[5], match[6]);
-          const title = match[7].trim();
-
-          if (startHour !== null && endHour !== null) {
+          if (startHour !== null && endHour !== null && title) {
             scheduled.push({
               id: blockId,
               start: startHour,
@@ -1130,21 +1232,47 @@
               title: title,
               category: categorizeTask(title),
               highlight: highlight,
-              originalMarkdown: originalMarkdown || trimmed
+              originalMarkdown: originalMarkdown || trimmed,
+              isTask: true,
+              checked: isChecked
             });
+            return;
           }
-        } else {
-          // Check if it's a checkbox/todo item
-          const todoMatch = trimmed.match(/^-?\s*\[([ x]?)\]\s*(.+)$/i);
-          if (todoMatch) {
-            const isChecked = todoMatch[1].toLowerCase() === 'x';
-            unscheduledItems.push({
+        }
+
+        // Check for regular time pattern (no checkbox)
+        const match = trimmed.match(timePattern);
+        if (match) {
+          const startHour = parseTime(match[1], match[2], match[3]);
+          const endHour = parseTime(match[4], match[5], match[6]);
+          const title = match[7].trim();
+
+          if (startHour !== null && endHour !== null && title) {
+            scheduled.push({
               id: blockId,
-              text: todoMatch[2].trim(),
-              checked: isChecked,
-              originalMarkdown: originalMarkdown || trimmed
+              start: startHour,
+              end: endHour,
+              title: title,
+              category: categorizeTask(title),
+              highlight: highlight,
+              originalMarkdown: originalMarkdown || trimmed,
+              isTask: false,
+              checked: false
             });
+            return;
           }
+        }
+
+        // Check if it's a checkbox/todo item (no time)
+        const todoMatch = trimmed.match(/^-?\s*\[([ x]?)\]\s*(.+)$/i);
+        if (todoMatch) {
+          const isChecked = todoMatch[1].toLowerCase() === 'x';
+          unscheduledItems.push({
+            id: blockId,
+            text: todoMatch[2].trim(),
+            checked: isChecked,
+            originalMarkdown: originalMarkdown || trimmed
+          });
         }
       }
 
@@ -1359,12 +1487,30 @@
         el.style.top = `${clampedTop}px`;
         el.style.height = `${clampedHeight}px`;
 
-        el.innerHTML = `
-          <div class="resize-handle resize-handle-top"></div>
-          <div class="timeblock-time">${formatTimeRange(block.start, block.end)}</div>
-          <div class="timeblock-title">${escapeHtml(block.title)}</div>
-          <div class="resize-handle resize-handle-bottom"></div>
-        `;
+        // Add checked class if it's a checked task
+        if (block.isTask && block.checked) {
+          el.classList.add('checked');
+        }
+
+        // Render with or without checkbox based on isTask
+        if (block.isTask) {
+          el.innerHTML = `
+            <div class="resize-handle resize-handle-top"></div>
+            <div class="timeblock-time">${formatTimeRange(block.start, block.end)}</div>
+            <div class="timeblock-content">
+              <input type="checkbox" class="timeblock-checkbox" ${block.checked ? 'checked' : ''}>
+              <div class="timeblock-title">${escapeHtml(block.title)}</div>
+            </div>
+            <div class="resize-handle resize-handle-bottom"></div>
+          `;
+        } else {
+          el.innerHTML = `
+            <div class="resize-handle resize-handle-top"></div>
+            <div class="timeblock-time">${formatTimeRange(block.start, block.end)}</div>
+            <div class="timeblock-title">${escapeHtml(block.title)}</div>
+            <div class="resize-handle resize-handle-bottom"></div>
+          `;
+        }
 
         timelineTrack.appendChild(el);
       });
@@ -1465,6 +1611,7 @@
         el.className = 'unscheduled-item' + (item.checked ? ' checked' : '');
         el.dataset.index = index;
         if (item.id) el.dataset.blockId = item.id;
+        el.draggable = true;
 
         const checkbox = document.createElement('input');
         checkbox.type = 'checkbox';
@@ -1484,6 +1631,23 @@
         el.addEventListener('mouseleave', () => {
           if (hoveredUnscheduledItem === el) hoveredUnscheduledItem = null;
           el.classList.remove('hovered');
+        });
+
+        // Drag events for unscheduled items
+        el.addEventListener('dragstart', (e) => {
+          el.classList.add('dragging');
+          e.dataTransfer.setData('text/plain', JSON.stringify({
+            type: 'unscheduled',
+            index: index,
+            blockId: item.id,
+            text: item.text,
+            checked: item.checked
+          }));
+          e.dataTransfer.effectAllowed = 'move';
+        });
+
+        el.addEventListener('dragend', () => {
+          el.classList.remove('dragging');
         });
 
         el.appendChild(checkbox);
@@ -1554,6 +1718,12 @@
       const blocks = timelineTrack.querySelectorAll('.timeblock');
 
       blocks.forEach(el => {
+        const blockIndex = parseInt(el.dataset.blockIndex);
+        const block = scheduledBlocks[blockIndex];
+
+        // Make draggable for cross-zone drag-and-drop
+        el.draggable = true;
+
         // Hover tracking
         el.addEventListener('mouseenter', () => {
           hoveredBlock = el;
@@ -1565,12 +1735,27 @@
           el.classList.remove('hovered');
         });
 
-        // Drag handling
-        el.addEventListener('mousedown', (e) => {
-          // Don't drag if clicking on resize handles
-          if (e.target.classList.contains('resize-handle')) return;
-          startDrag(el, e);
+        // HTML5 drag events for dropping into unscheduled
+        el.addEventListener('dragstart', (e) => {
+          if (!block) return;
+          el.classList.add('dragging');
+          e.dataTransfer.setData('text/plain', JSON.stringify({
+            type: 'scheduled',
+            index: blockIndex,
+            blockId: block.id,
+            title: block.title,
+            start: block.start,
+            end: block.end
+          }));
+          e.dataTransfer.effectAllowed = 'move';
         });
+
+        el.addEventListener('dragend', () => {
+          el.classList.remove('dragging');
+        });
+
+        // Note: Using HTML5 drag-and-drop for all drag operations
+        // Mouse-based drag removed to avoid conflict with HTML5 drag
 
         // Resize handles
         const topHandle = el.querySelector('.resize-handle-top');
@@ -1585,10 +1770,79 @@
           e.stopPropagation();
           startResize(el, e, 'bottom');
         });
+
+        // Checkbox handler for task timeblocks
+        const checkbox = el.querySelector('.timeblock-checkbox');
+        if (checkbox) {
+          checkbox.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent drag
+          });
+          checkbox.addEventListener('change', () => {
+            toggleTaskTimeblock(blockIndex, checkbox.checked);
+          });
+        }
       });
 
       // Keyboard handler for delete
       document.addEventListener('keydown', handleKeydown);
+    }
+
+    // Toggle checkbox on task timeblock
+    async function toggleTaskTimeblock(index, checked) {
+      const block = scheduledBlocks[index];
+      if (!block || !block.id) {
+        console.warn('Cannot update block: no block ID');
+        return;
+      }
+
+      // Update local state
+      block.checked = checked;
+
+      // Update UI immediately
+      const el = timelineTrack.querySelector(`[data-block-index="${index}"]`);
+      if (el) {
+        el.classList.toggle('checked', checked);
+      }
+
+      // Build new markdown
+      const startStr = decimalToTimeString(block.start);
+      const endStr = decimalToTimeString(block.end);
+      const checkMark = checked ? 'x' : ' ';
+      const newMarkdown = `- [${checkMark}] \`${startStr} - ${endStr}\` ${block.title}`;
+
+      showSyncStatus('saving', 'Updating...');
+
+      try {
+        const response = await fetch(`${apiUrl}/blocks`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            blocks: [{
+              id: block.id,
+              markdown: newMarkdown
+            }]
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update: ${response.status}`);
+        }
+
+        block.originalMarkdown = newMarkdown;
+        showSyncStatus('saved', 'Updated');
+      } catch (err) {
+        console.error('Failed to update task:', err);
+        showSyncStatus('error', 'Update failed');
+        // Revert UI on error
+        block.checked = !checked;
+        if (el) {
+          el.classList.toggle('checked', !checked);
+          const checkbox = el.querySelector('.timeblock-checkbox');
+          if (checkbox) checkbox.checked = !checked;
+        }
+      }
     }
 
     function handleKeydown(e) {
@@ -2208,6 +2462,256 @@
         createInlineUnscheduledTask();
       }
     });
+
+    // Drag-and-drop between timeline and unscheduled
+    let dropIndicator = null;
+    let unscheduledWasHidden = false;
+
+    // Show unscheduled section as drop target when dragging from timeline
+    document.addEventListener('dragstart', (e) => {
+      const timeblock = e.target.closest('.timeblock');
+      if (timeblock && !timeblock.classList.contains('editing')) {
+        // Show unscheduled section as a drop target
+        if (unscheduled.classList.contains('hidden')) {
+          unscheduledWasHidden = true;
+          unscheduled.classList.remove('hidden');
+          unscheduledList.innerHTML = '<div class="unscheduled-drop-indicator">Drop here to unschedule</div>';
+        }
+      }
+    });
+
+    document.addEventListener('dragend', (e) => {
+      // Hide unscheduled section if it was hidden before
+      if (unscheduledWasHidden) {
+        unscheduledWasHidden = false;
+        if (unscheduledBlocks.length === 0) {
+          unscheduled.classList.add('hidden');
+          unscheduledList.innerHTML = '';
+        }
+      }
+      // Remove drop indicator class
+      unscheduled.classList.remove('drag-over');
+    });
+
+    // Timeline drop zone - for dropping unscheduled items to become timeblocks
+    timelineTrack.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+
+      try {
+        // Show drop indicator at cursor position
+        const rect = timelineTrack.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        let startDecimal = y / HOUR_HEIGHT + START_HOUR;
+        startDecimal = Math.round(startDecimal * 4) / 4; // Snap to 15 min
+        startDecimal = Math.max(START_HOUR, Math.min(END_HOUR - 1, startDecimal));
+
+        const top = (startDecimal - START_HOUR) * HOUR_HEIGHT;
+
+        if (!dropIndicator) {
+          dropIndicator = document.createElement('div');
+          dropIndicator.className = 'drop-indicator';
+          timelineTrack.appendChild(dropIndicator);
+        }
+
+        dropIndicator.style.top = `${top}px`;
+        dropIndicator.textContent = formatTimeRange(startDecimal, startDecimal + 1);
+        timelineTrack.classList.add('drag-over');
+      } catch (err) {
+        console.error('Dragover error:', err);
+      }
+    });
+
+    timelineTrack.addEventListener('dragleave', (e) => {
+      // Only remove if leaving the track entirely
+      if (!timelineTrack.contains(e.relatedTarget)) {
+        timelineTrack.classList.remove('drag-over');
+        if (dropIndicator) {
+          dropIndicator.remove();
+          dropIndicator = null;
+        }
+      }
+    });
+
+    timelineTrack.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      timelineTrack.classList.remove('drag-over');
+
+      if (dropIndicator) {
+        dropIndicator.remove();
+        dropIndicator = null;
+      }
+
+      try {
+        const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+
+        // Calculate drop time
+        const rect = timelineTrack.getBoundingClientRect();
+        const y = e.clientY - rect.top;
+        let startDecimal = y / HOUR_HEIGHT + START_HOUR;
+        startDecimal = Math.round(startDecimal * 4) / 4;
+        startDecimal = Math.max(START_HOUR, Math.min(END_HOUR - 1, startDecimal));
+
+        if (data.type === 'unscheduled') {
+          // Convert unscheduled to timeblock
+          const endDecimal = startDecimal + 1; // 1 hour duration
+          await convertUnscheduledToTimeblock(data, startDecimal, endDecimal);
+        } else if (data.type === 'scheduled') {
+          // Reposition scheduled block within timeline
+          const duration = data.end - data.start;
+          const endDecimal = startDecimal + duration;
+          await repositionTimeblock(data, startDecimal, endDecimal);
+        }
+      } catch (err) {
+        console.error('Drop error:', err);
+      }
+    });
+
+    // Unscheduled section drop zone - for dropping timeblocks to become tasks
+    unscheduled.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      unscheduled.classList.add('drag-over');
+    });
+
+    unscheduled.addEventListener('dragleave', (e) => {
+      if (!unscheduled.contains(e.relatedTarget)) {
+        unscheduled.classList.remove('drag-over');
+      }
+    });
+
+    unscheduled.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      unscheduled.classList.remove('drag-over');
+
+      try {
+        const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+
+        // Only handle drops from scheduled timeblocks
+        if (data.type !== 'scheduled') return;
+
+        await convertTimeblockToUnscheduled(data);
+      } catch (err) {
+        console.error('Drop error:', err);
+      }
+    });
+
+    // Convert unscheduled item to timeblock (add time)
+    async function convertUnscheduledToTimeblock(data, startDecimal, endDecimal) {
+      if (!data.blockId) {
+        console.warn('Cannot convert: no block ID');
+        return;
+      }
+
+      const startStr = decimalToTimeString(startDecimal);
+      const endStr = decimalToTimeString(endDecimal);
+      const checkMark = data.checked ? 'x' : ' ';
+      const newMarkdown = `- [${checkMark}] \`${startStr} - ${endStr}\` ${data.text}`;
+
+      showSyncStatus('saving', 'Scheduling...');
+
+      try {
+        const response = await fetch(`${apiUrl}/blocks`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            blocks: [{
+              id: data.blockId,
+              markdown: newMarkdown
+            }]
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update: ${response.status}`);
+        }
+
+        showSyncStatus('saved', 'Scheduled');
+        loadSchedule();
+      } catch (err) {
+        console.error('Failed to convert to timeblock:', err);
+        showSyncStatus('error', 'Schedule failed');
+      }
+    }
+
+    // Convert timeblock to unscheduled task (remove time)
+    async function convertTimeblockToUnscheduled(data) {
+      if (!data.blockId) {
+        console.warn('Cannot convert: no block ID');
+        return;
+      }
+
+      // Remove time, keep just the task
+      const newMarkdown = `- [ ] ${data.title}`;
+
+      showSyncStatus('saving', 'Unscheduling...');
+
+      try {
+        const response = await fetch(`${apiUrl}/blocks`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            blocks: [{
+              id: data.blockId,
+              markdown: newMarkdown
+            }]
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update: ${response.status}`);
+        }
+
+        showSyncStatus('saved', 'Unscheduled');
+        loadSchedule();
+      } catch (err) {
+        console.error('Failed to convert to task:', err);
+        showSyncStatus('error', 'Unschedule failed');
+      }
+    }
+
+    // Reposition timeblock within timeline (change time)
+    async function repositionTimeblock(data, newStart, newEnd) {
+      if (!data.blockId) {
+        console.warn('Cannot reposition: no block ID');
+        return;
+      }
+
+      const startStr = decimalToTimeString(newStart);
+      const endStr = decimalToTimeString(newEnd);
+      const newMarkdown = `\`${startStr} - ${endStr}\` - ${data.title}`;
+
+      showSyncStatus('saving', 'Moving...');
+
+      try {
+        const response = await fetch(`${apiUrl}/blocks`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            blocks: [{
+              id: data.blockId,
+              markdown: newMarkdown
+            }]
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update: ${response.status}`);
+        }
+
+        showSyncStatus('saved', 'Moved');
+        loadSchedule();
+      } catch (err) {
+        console.error('Failed to reposition block:', err);
+        showSyncStatus('error', 'Move failed');
+      }
+    }
 
     // Start
     init();

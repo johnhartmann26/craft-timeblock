@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Timeblock</title>
   <style>
     * {
@@ -63,6 +63,8 @@
       line-height: 1.5;
       min-height: 100vh;
       transition: background 0.2s, color 0.2s;
+      touch-action: pan-y;
+      -webkit-text-size-adjust: 100%;
     }
 
     /* Setup Screen */

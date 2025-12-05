@@ -211,6 +211,48 @@
       stroke: var(--text);
     }
 
+    /* Sync Status Indicator */
+    .sync-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.75rem;
+      color: var(--text-muted);
+      opacity: 0;
+      transition: opacity 0.2s;
+      margin-right: 8px;
+    }
+
+    .sync-status.visible {
+      opacity: 1;
+    }
+
+    .sync-status.saving {
+      color: var(--accent);
+    }
+
+    .sync-status.saved {
+      color: #86c06c;
+    }
+
+    .sync-status.error {
+      color: #f87171;
+    }
+
+    .sync-spinner {
+      width: 12px;
+      height: 12px;
+      border: 2px solid currentColor;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.6s linear infinite;
+    }
+
+    .sync-icon {
+      width: 14px;
+      height: 14px;
+    }
+
     /* Timeline */
     .timeline {
       position: relative;
@@ -361,6 +403,50 @@
     .timeblock.current {
       background: var(--card-current);
       border-color: var(--now-line);
+    }
+
+    /* Drag and Resize */
+    .timeblock {
+      cursor: grab;
+      user-select: none;
+    }
+
+    .timeblock.dragging {
+      opacity: 0.8;
+      cursor: grabbing;
+      z-index: 100;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    .timeblock.hovered {
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+    }
+
+    .resize-handle {
+      position: absolute;
+      left: 0;
+      right: 0;
+      height: 8px;
+      cursor: ns-resize;
+      z-index: 5;
+    }
+
+    .resize-handle-top {
+      top: -4px;
+    }
+
+    .resize-handle-bottom {
+      bottom: -4px;
+    }
+
+    .resize-handle:hover {
+      background: var(--accent);
+      opacity: 0.3;
+    }
+
+    .timeblock.resizing {
+      z-index: 100;
     }
 
     /* Unscheduled Section */
@@ -588,6 +674,10 @@
     <header class="header">
       <h1 id="date-title">Today</h1>
       <div class="header-actions">
+        <div id="sync-status" class="sync-status">
+          <span class="sync-indicator"></span>
+          <span class="sync-text"></span>
+        </div>
         <button class="icon-btn" id="refresh-btn" title="Refresh">
           <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
             <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
@@ -658,6 +748,8 @@
     let apiUrl = '';
     let currentTheme = 'dark';
     let nowLineInterval = null;
+    let hoveredBlock = null;
+    let scheduledBlocks = []; // Store blocks with IDs for updates
 
     // DOM Elements
     const setupScreen = document.getElementById('setup-screen');
@@ -877,9 +969,11 @@
 
         const { scheduled, unscheduledItems } = parseBlocks(data);
 
+        scheduledBlocks = scheduled; // Store for updates
         renderTimeline(scheduled);
         renderUnscheduled(unscheduledItems);
         startNowLineUpdates();
+        setupInteractions();
 
         showTimeline();
         scrollToNow();
@@ -919,7 +1013,7 @@
       // Or: 14:00 - 15:30 - Task (24-hour)
       const timePattern = /^`?(\d{1,2}):(\d{2})\s*(am|pm)?\s*[-–—]+\s*(\d{1,2}):(\d{2})\s*(am|pm)?`?\s*[-–—]+\s*(.+)$/i;
 
-      function processText(text, highlight = null) {
+      function processText(text, highlight = null, blockId = null, originalMarkdown = null) {
         if (!text || typeof text !== 'string') return;
 
         let trimmed = text.trim();
@@ -941,11 +1035,13 @@
 
           if (startHour !== null && endHour !== null) {
             scheduled.push({
+              id: blockId,
               start: startHour,
               end: endHour,
               title: title,
               category: categorizeTask(title),
-              highlight: highlight
+              highlight: highlight,
+              originalMarkdown: originalMarkdown || trimmed
             });
           }
         } else {
@@ -960,6 +1056,7 @@
       function processBlock(block) {
         // Extract color - Craft uses hex colors like '#ef052a'
         let blockColor = block.color || block.highlight || block.highlightColor || null;
+        const blockId = block.id || null;
 
         // Check if color is an object with color property
         if (blockColor && typeof blockColor === 'object') {
@@ -981,17 +1078,17 @@
               return; // Don't process further
             }
           }
-          processText(block.markdown, blockColor);
+          processText(block.markdown, blockColor, blockId, block.markdown);
         }
 
         // Handle content field (can be array of nested blocks)
         if (block.content) {
           if (typeof block.content === 'string') {
-            processText(block.content, blockColor);
+            processText(block.content, blockColor, blockId, block.content);
           } else if (Array.isArray(block.content)) {
             block.content.forEach(item => {
               if (typeof item === 'string') {
-                processText(item, blockColor);
+                processText(item, blockColor, blockId, item);
               } else if (typeof item === 'object') {
                 processBlock(item); // Recursively process nested blocks
               }
@@ -1001,12 +1098,12 @@
 
         // Handle text field
         if (block.text) {
-          processText(block.text);
+          processText(block.text, null, blockId, block.text);
         }
 
         // Handle pageTitle as fallback
         if (block.pageTitle) {
-          processText(block.pageTitle);
+          processText(block.pageTitle, null, blockId, block.pageTitle);
         }
 
         // Process nested structures
@@ -1123,9 +1220,11 @@
       // Add timeblocks
       const now = getCurrentTimeDecimal();
 
-      scheduled.forEach(block => {
+      scheduled.forEach((block, index) => {
         const el = document.createElement('div');
         el.className = `timeblock ${block.category}`;
+        el.dataset.blockIndex = index;
+        if (block.id) el.dataset.blockId = block.id;
 
         // Apply color from Craft if present
         if (block.highlight) {
@@ -1158,8 +1257,10 @@
         el.style.height = `${clampedHeight}px`;
 
         el.innerHTML = `
+          <div class="resize-handle resize-handle-top"></div>
           <div class="timeblock-time">${formatTimeRange(block.start, block.end)}</div>
           <div class="timeblock-title">${escapeHtml(block.title)}</div>
+          <div class="resize-handle resize-handle-bottom"></div>
         `;
 
         timelineTrack.appendChild(el);
@@ -1264,6 +1365,319 @@
       });
 
       unscheduled.classList.remove('hidden');
+    }
+
+    // Interactions: Drag, Resize, Delete
+    function setupInteractions() {
+      const blocks = timelineTrack.querySelectorAll('.timeblock');
+
+      blocks.forEach(el => {
+        // Hover tracking
+        el.addEventListener('mouseenter', () => {
+          hoveredBlock = el;
+          el.classList.add('hovered');
+        });
+
+        el.addEventListener('mouseleave', () => {
+          if (hoveredBlock === el) hoveredBlock = null;
+          el.classList.remove('hovered');
+        });
+
+        // Drag handling
+        el.addEventListener('mousedown', (e) => {
+          // Don't drag if clicking on resize handles
+          if (e.target.classList.contains('resize-handle')) return;
+          startDrag(el, e);
+        });
+
+        // Resize handles
+        const topHandle = el.querySelector('.resize-handle-top');
+        const bottomHandle = el.querySelector('.resize-handle-bottom');
+
+        topHandle.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          startResize(el, e, 'top');
+        });
+
+        bottomHandle.addEventListener('mousedown', (e) => {
+          e.stopPropagation();
+          startResize(el, e, 'bottom');
+        });
+      });
+
+      // Keyboard handler for delete
+      document.addEventListener('keydown', handleKeydown);
+    }
+
+    function handleKeydown(e) {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && hoveredBlock) {
+        // Prevent backspace from navigating back
+        e.preventDefault();
+        deleteBlock(hoveredBlock);
+      }
+    }
+
+    // Drag functionality
+    function startDrag(el, e) {
+      e.preventDefault();
+      el.classList.add('dragging');
+
+      const startY = e.clientY;
+      const startTop = parseFloat(el.style.top);
+      const blockHeight = parseFloat(el.style.height);
+      const maxTop = TOTAL_HOURS * HOUR_HEIGHT - blockHeight;
+
+      function onMouseMove(e) {
+        const deltaY = e.clientY - startY;
+        let newTop = startTop + deltaY;
+
+        // Snap to 15-minute increments (15px = 15 min at 60px/hour)
+        newTop = Math.round(newTop / 15) * 15;
+
+        // Clamp to valid range
+        newTop = Math.max(0, Math.min(maxTop, newTop));
+
+        el.style.top = `${newTop}px`;
+
+        // Update time display
+        const newStart = newTop / HOUR_HEIGHT + START_HOUR;
+        const duration = blockHeight / HOUR_HEIGHT;
+        const newEnd = newStart + duration;
+        const timeEl = el.querySelector('.timeblock-time');
+        if (timeEl) {
+          timeEl.textContent = formatTimeRange(newStart, newEnd);
+        }
+      }
+
+      function onMouseUp() {
+        el.classList.remove('dragging');
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+
+        // Calculate new times and update
+        const newTop = parseFloat(el.style.top);
+        const blockHeight = parseFloat(el.style.height);
+        const newStart = newTop / HOUR_HEIGHT + START_HOUR;
+        const newEnd = newStart + blockHeight / HOUR_HEIGHT;
+
+        updateBlockTime(el, newStart, newEnd);
+      }
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    }
+
+    // Resize functionality
+    function startResize(el, e, edge) {
+      e.preventDefault();
+      el.classList.add('resizing');
+
+      const startY = e.clientY;
+      const startTop = parseFloat(el.style.top);
+      const startHeight = parseFloat(el.style.height);
+      const minHeight = 15; // 15 minutes minimum
+
+      function onMouseMove(e) {
+        const deltaY = e.clientY - startY;
+        let newTop = startTop;
+        let newHeight = startHeight;
+
+        if (edge === 'top') {
+          // Dragging top edge - changes start time
+          newTop = startTop + deltaY;
+          newHeight = startHeight - deltaY;
+
+          // Snap to 15-minute increments
+          newTop = Math.round(newTop / 15) * 15;
+          newHeight = startHeight + startTop - newTop;
+
+          // Clamp
+          if (newTop < 0) {
+            newTop = 0;
+            newHeight = startHeight + startTop;
+          }
+          if (newHeight < minHeight) {
+            newHeight = minHeight;
+            newTop = startTop + startHeight - minHeight;
+          }
+        } else {
+          // Dragging bottom edge - changes end time
+          newHeight = startHeight + deltaY;
+
+          // Snap to 15-minute increments
+          newHeight = Math.round(newHeight / 15) * 15;
+
+          // Clamp
+          newHeight = Math.max(minHeight, newHeight);
+          const maxHeight = TOTAL_HOURS * HOUR_HEIGHT - startTop;
+          newHeight = Math.min(maxHeight, newHeight);
+        }
+
+        el.style.top = `${newTop}px`;
+        el.style.height = `${newHeight}px`;
+
+        // Update time display
+        const newStart = newTop / HOUR_HEIGHT + START_HOUR;
+        const newEnd = newStart + newHeight / HOUR_HEIGHT;
+        const timeEl = el.querySelector('.timeblock-time');
+        if (timeEl) {
+          timeEl.textContent = formatTimeRange(newStart, newEnd);
+        }
+      }
+
+      function onMouseUp() {
+        el.classList.remove('resizing');
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+
+        // Calculate new times and update
+        const newTop = parseFloat(el.style.top);
+        const newHeight = parseFloat(el.style.height);
+        const newStart = newTop / HOUR_HEIGHT + START_HOUR;
+        const newEnd = newStart + newHeight / HOUR_HEIGHT;
+
+        updateBlockTime(el, newStart, newEnd);
+      }
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+    }
+
+    // Sync status indicator
+    let syncHideTimeout = null;
+    const syncStatus = document.getElementById('sync-status');
+    const syncIndicator = syncStatus.querySelector('.sync-indicator');
+    const syncText = syncStatus.querySelector('.sync-text');
+
+    function showSyncStatus(status, message) {
+      if (syncHideTimeout) {
+        clearTimeout(syncHideTimeout);
+        syncHideTimeout = null;
+      }
+
+      syncStatus.className = 'sync-status visible ' + status;
+
+      if (status === 'saving') {
+        syncIndicator.innerHTML = '<div class="sync-spinner"></div>';
+        syncText.textContent = message || 'Saving...';
+      } else if (status === 'saved') {
+        syncIndicator.innerHTML = '<svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
+        syncText.textContent = message || 'Saved';
+        // Auto-hide after 2 seconds
+        syncHideTimeout = setTimeout(() => {
+          syncStatus.classList.remove('visible');
+        }, 2000);
+      } else if (status === 'error') {
+        syncIndicator.innerHTML = '<svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12"/></svg>';
+        syncText.textContent = message || 'Error';
+        // Auto-hide after 3 seconds
+        syncHideTimeout = setTimeout(() => {
+          syncStatus.classList.remove('visible');
+        }, 3000);
+      }
+    }
+
+    // Convert decimal time to formatted string for markdown
+    function decimalToTimeString(decimal) {
+      const hours = Math.floor(decimal);
+      const minutes = Math.round((decimal - hours) * 60);
+      const period = hours >= 12 ? 'PM' : 'AM';
+      const displayHours = hours > 12 ? hours - 12 : (hours === 0 ? 12 : hours);
+      return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
+    }
+
+    // Update block time in Craft
+    async function updateBlockTime(el, newStart, newEnd) {
+      const blockIndex = parseInt(el.dataset.blockIndex);
+      const block = scheduledBlocks[blockIndex];
+
+      if (!block || !block.id) {
+        console.warn('Cannot update block: no block ID');
+        return;
+      }
+
+      // Update local state
+      block.start = newStart;
+      block.end = newEnd;
+
+      // Build new markdown
+      const newStartStr = decimalToTimeString(newStart);
+      const newEndStr = decimalToTimeString(newEnd);
+      const newMarkdown = `\`${newStartStr} - ${newEndStr}\` - ${block.title}`;
+
+      showSyncStatus('saving', 'Syncing...');
+
+      try {
+        const response = await fetch(`${apiUrl}/blocks`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            blocks: [{
+              id: block.id,
+              markdown: newMarkdown
+            }]
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to update: ${response.status}`);
+        }
+
+        // Update stored markdown
+        block.originalMarkdown = newMarkdown;
+        showSyncStatus('saved', 'Saved');
+      } catch (err) {
+        console.error('Failed to update block:', err);
+        showSyncStatus('error', 'Sync failed');
+      }
+    }
+
+    // Delete block from Craft
+    async function deleteBlock(el) {
+      const blockIndex = parseInt(el.dataset.blockIndex);
+      const block = scheduledBlocks[blockIndex];
+
+      if (!block || !block.id) {
+        console.warn('Cannot delete block: no block ID');
+        return;
+      }
+
+      showSyncStatus('saving', 'Deleting...');
+
+      try {
+        const response = await fetch(`${apiUrl}/blocks`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            blockIds: [block.id]
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`Failed to delete: ${response.status}`);
+        }
+
+        // Remove from DOM
+        el.remove();
+
+        // Remove from local state
+        scheduledBlocks.splice(blockIndex, 1);
+
+        // Update indices on remaining blocks
+        timelineTrack.querySelectorAll('.timeblock').forEach((block, i) => {
+          block.dataset.blockIndex = i;
+        });
+
+        hoveredBlock = null;
+        showSyncStatus('saved', 'Deleted');
+      } catch (err) {
+        console.error('Failed to delete block:', err);
+        showSyncStatus('error', 'Delete failed');
+      }
     }
 
     // Start

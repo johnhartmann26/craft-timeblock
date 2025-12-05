@@ -14,7 +14,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // State
     let apiUrl = '';
-    // REMOVED: currentTheme variable
     let nowLineInterval = null;
     let hoveredBlock = null;
     let scheduledBlocks = []; 
@@ -46,8 +45,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const timelineContainer = document.getElementById('timeline-container');
     const timeAxis = document.getElementById('time-axis');
     const timelineTrack = document.getElementById('timeline-track');
-    const unscheduled = document.getElementById('unscheduled');
+    
+    // Unscheduled & Done Sections
+    const unscheduledSection = document.getElementById('unscheduled');
     const unscheduledList = document.getElementById('unscheduled-list');
+    const doneSection = document.getElementById('done');
+    const doneList = document.getElementById('done-list');
 
     const refreshBtn = document.getElementById('refresh-btn');
     const addTaskBtn = document.getElementById('add-task-btn');
@@ -60,13 +63,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const settingsApiUrl = document.getElementById('settings-api-url');
     const settingsStartHour = document.getElementById('settings-start-hour');
     const settingsEndHour = document.getElementById('settings-end-hour');
-    // REMOVED: themeBtns selector
 
     // Initialize
     function init() {
-      // REMOVED: All theme logic (applyTheme, currentTheme, etc.)
-      
-      // Load time settings
       loadTimeSettings();
       populateTimeSelects();
 
@@ -175,8 +174,6 @@ document.addEventListener('DOMContentLoaded', () => {
       loadSchedule();
     }
 
-    // REMOVED: applyTheme, updateThemeButtons, setTheme functions
-
     function setupEventListeners() {
       setupForm.addEventListener('submit', handleSetup);
       refreshBtn.addEventListener('click', loadSchedule);
@@ -211,8 +208,10 @@ document.addEventListener('DOMContentLoaded', () => {
           closeSettings();
         }
       });
-
-      // REMOVED: themeBtns event listeners (handled in theme.js now)
+      
+      // Setup drop zones for both sections
+      setupDropZone(unscheduledSection);
+      setupDropZone(doneSection);
     }
 
     // Setup
@@ -402,15 +401,15 @@ document.addEventListener('DOMContentLoaded', () => {
       errorState.classList.remove('hidden');
     }
 
-    // Parse Blocks - handles both JSON and XML responses from Craft API
+    // Parse Blocks
     function parseBlocks(data) {
       const scheduled = [];
       const unscheduledItems = [];
 
-      // Time pattern: flexible for 12/24 hour formats
+      // Time pattern
       const timePattern = /^`?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:[-–—]+|to|->|→)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?`?\s*(?:[-–—:]|\s)\s*(.+)$/i;
 
-      // Task with time pattern: - [x] `1:00 PM - 2:00 PM` Task name
+      // Task with time pattern
       const taskWithTimePattern = /^-?\s*\[([ x]?)\]\s*`?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:[-–—]+|to|->|→)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?`?\s*(?:[-–—:]|\s)\s*(.+)$/i;
 
       function processText(text, highlight = null, blockId = null, originalMarkdown = null) {
@@ -419,18 +418,18 @@ document.addEventListener('DOMContentLoaded', () => {
         let trimmed = text.trim();
         if (!trimmed) return;
 
-        // Check for <highlight color="...">content</highlight> wrapper
+        // Check for highlighting
         const highlightMatch = trimmed.match(/^<highlight\s+color=["']([^"']+)["']>(.+)<\/highlight>$/is);
         if (highlightMatch) {
-          highlight = highlightMatch[1]; // e.g., "gradient-purple"
-          trimmed = highlightMatch[2].trim(); // The content inside
+          highlight = highlightMatch[1]; 
+          trimmed = highlightMatch[2].trim(); 
         }
 
         // First check for task with time (checkbox + time)
         const taskWithTimeMatch = trimmed.match(taskWithTimePattern);
         if (taskWithTimeMatch) {
           const isChecked = taskWithTimeMatch[1].toLowerCase() === 'x';
-          // Shared AM/PM: if start has no period but end does, use end's period for both
+          // Shared AM/PM
           let startPeriod = taskWithTimeMatch[4];
           const endPeriod = taskWithTimeMatch[7];
           if (!startPeriod && endPeriod) startPeriod = endPeriod;
@@ -458,7 +457,6 @@ document.addEventListener('DOMContentLoaded', () => {
         // Check for regular time pattern (no checkbox)
         const match = trimmed.match(timePattern);
         if (match) {
-          // Shared AM/PM: if start has no period but end does, use end's period for both
           let startPeriod = match[3];
           const endPeriod = match[6];
           if (!startPeriod && endPeriod) startPeriod = endPeriod;
@@ -497,27 +495,21 @@ document.addEventListener('DOMContentLoaded', () => {
       }
 
       function processBlock(block) {
-        // Extract color - Craft uses hex colors like '#ef052a'
         let blockColor = block.color || block.highlight || block.highlightColor || null;
         const blockId = block.id || null;
 
-        // Check if color is an object with color property
         if (blockColor && typeof blockColor === 'object') {
           blockColor = blockColor.color || blockColor.name || null;
         }
 
-        // Check style property
         if (!blockColor && block.style) {
           blockColor = block.style.color || block.style.highlight || null;
         }
 
-        // Handle markdown field (where Craft stores the text content)
         if (block.markdown) {
-          // Check if this is a todo item by listStyle
           if (block.listStyle === 'todo' || block.listStyle === 'checkbox') {
             const text = block.markdown.replace(/^-?\s*\[[ x]?\]\s*/i, '').trim();
             if (text && !text.match(timePattern)) {
-              // Check taskInfo for done state, or parse [x] from markdown
               const isChecked = block.taskInfo?.state === 'done' ||
                                 /^-?\s*\[x\]/i.test(block.markdown);
               unscheduledItems.push({
@@ -526,13 +518,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 checked: isChecked,
                 originalMarkdown: block.markdown
               });
-              return; // Don't process further
+              return; 
             }
           }
           processText(block.markdown, blockColor, blockId, block.markdown);
         }
 
-        // Handle content field (can be array of nested blocks)
         if (block.content) {
           if (typeof block.content === 'string') {
             processText(block.content, blockColor, blockId, block.content);
@@ -541,40 +532,26 @@ document.addEventListener('DOMContentLoaded', () => {
               if (typeof item === 'string') {
                 processText(item, blockColor, blockId, item);
               } else if (typeof item === 'object') {
-                processBlock(item); // Recursively process nested blocks
+                processBlock(item); 
               }
             });
           }
         }
 
-        // Handle text field
         if (block.text) {
           processText(block.text, null, blockId, block.text);
         }
-
-        // Handle pageTitle as fallback
         if (block.pageTitle) {
           processText(block.pageTitle, null, blockId, block.pageTitle);
         }
 
-        // Process nested structures
-        if (block.blocks) {
-          block.blocks.forEach(processBlock);
-        }
-        if (block.subblocks) {
-          block.subblocks.forEach(processBlock);
-        }
-        if (block.children) {
-          block.children.forEach(processBlock);
-        }
-        if (block.page) {
-          processBlock(block.page);
-        }
+        if (block.blocks) block.blocks.forEach(processBlock);
+        if (block.subblocks) block.subblocks.forEach(processBlock);
+        if (block.children) block.children.forEach(processBlock);
+        if (block.page) processBlock(block.page);
       }
 
-      // Handle different response structures
       if (typeof data === 'string') {
-        // Try to parse as XML
         const parsed = parseXMLResponse(data);
         if (parsed.length > 0) {
           parsed.forEach(text => processText(text));
@@ -586,68 +563,50 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (data.blocks) {
         data.blocks.forEach(processBlock);
       } else {
-        // Try processing the whole object
         processBlock(data);
       }
 
-      // Sort by start time
       scheduled.sort((a, b) => a.start - b.start);
 
       return { scheduled, unscheduledItems };
     }
 
-    // Parse XML response from Craft API
     function parseXMLResponse(xmlString) {
       const results = [];
-
-      // Extract pageTitle contents
       const pageTitleRegex = /<pageTitle>([^<]+)<\/pageTitle>/g;
       let match;
       while ((match = pageTitleRegex.exec(xmlString)) !== null) {
         results.push(match[1]);
       }
-
-      // Extract content that might have time patterns
       const contentRegex = /<content>([^<]+)<\/content>/g;
       while ((match = contentRegex.exec(xmlString)) !== null) {
         results.push(match[1]);
       }
-
       return results;
     }
 
     function parseTime(hours, minutes, period) {
       let h = parseInt(hours, 10);
       const m = parseInt(minutes || '0', 10);
-
       if (isNaN(h)) return null;
 
-      // Handle 12-hour format
       if (period) {
         const p = period.toLowerCase();
         if (p === 'pm' && h !== 12) h += 12;
         if (p === 'am' && h === 12) h = 0;
-      } else {
-        // Assume 24-hour format if no period, or infer from context
-        // If hour > 12, it's definitely 24-hour
-        // If hour <= 12 and no period, assume AM for morning hours
       }
-
       return h + m / 60;
     }
 
     function categorizeTask(title) {
       const lower = title.toLowerCase();
-
       if (/deep work|focus|code|write|develop|build/.test(lower)) return 'work';
       if (/call|meeting|sync|chat|standup|1:1|interview/.test(lower)) return 'meeting';
       if (/gym|exercise|workout|run|yoga|walk|health|meditat/.test(lower)) return 'health';
       if (/lunch|dinner|breakfast|break|personal|family|friend/.test(lower)) return 'personal';
-
       return 'default';
     }
 
-    // Helper: Convert hex color to rgba
     function hexToRgba(hex, alpha) {
       const r = parseInt(hex.slice(1, 3), 16);
       const g = parseInt(hex.slice(3, 5), 16);
@@ -657,10 +616,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Render Timeline
     function renderTimeline(scheduled) {
-      // Clear existing blocks (keep hour lines)
       timelineTrack.querySelectorAll('.timeblock, .now-line, .hour-line').forEach(el => el.remove());
 
-      // Add hour lines
       for (let hour = START_HOUR; hour <= END_HOUR; hour++) {
         const line = document.createElement('div');
         line.className = 'hour-line';
@@ -668,7 +625,6 @@ document.addEventListener('DOMContentLoaded', () => {
         timelineTrack.appendChild(line);
       }
 
-      // Add timeblocks
       const now = getCurrentTimeDecimal();
 
       scheduled.forEach((block, index) => {
@@ -677,65 +633,50 @@ document.addEventListener('DOMContentLoaded', () => {
         el.dataset.blockIndex = index;
         if (block.id) el.dataset.blockId = block.id;
 
-        // Apply color from Craft if present
         if (block.highlight) {
           if (block.highlight.startsWith('#')) {
-            // Hex color - apply directly as style
             el.style.background = hexToRgba(block.highlight, 0.25);
             el.style.borderColor = hexToRgba(block.highlight, 0.5);
           } else {
-            // Named color - use class
             const highlightClass = `highlight-${block.highlight.replace(/[^a-z0-9-]/gi, '-').toLowerCase()}`;
             el.classList.add(highlightClass);
           }
         }
 
-        // Check if current
         if (now >= block.start && now < block.end) {
           el.classList.add('current');
         }
 
         const top = (block.start - START_HOUR) * HOUR_HEIGHT;
         const height = (block.end - block.start) * HOUR_HEIGHT;
-
-        // Clamp to visible range
         const clampedTop = Math.max(0, top);
         const clampedHeight = Math.min(height, TOTAL_HOURS * HOUR_HEIGHT - clampedTop);
 
-        if (clampedHeight <= 0) return; // Outside visible range
+        if (clampedHeight <= 0) return;
 
         el.style.top = `${clampedTop}px`;
         el.style.height = `${clampedHeight}px`;
 
-        // Add checked class if it's a checked task
         if (block.isTask && block.checked) {
           el.classList.add('checked');
         }
 
-        // Render with or without checkbox based on isTask
-        if (block.isTask) {
-          el.innerHTML = `
+        const innerContent = `
             <div class="resize-handle resize-handle-top"></div>
             <div class="timeblock-time">${formatTimeRange(block.start, block.end)}</div>
-            <div class="timeblock-content">
-              <input type="checkbox" class="timeblock-checkbox" ${block.checked ? 'checked' : ''}>
-              <div class="timeblock-title">${escapeHtml(block.title)}</div>
-            </div>
+            ${block.isTask 
+              ? `<div class="timeblock-content">
+                   <input type="checkbox" class="timeblock-checkbox" ${block.checked ? 'checked' : ''}>
+                   <div class="timeblock-title">${escapeHtml(block.title)}</div>
+                 </div>`
+              : `<div class="timeblock-title">${escapeHtml(block.title)}</div>`
+            }
             <div class="resize-handle resize-handle-bottom"></div>
-          `;
-        } else {
-          el.innerHTML = `
-            <div class="resize-handle resize-handle-top"></div>
-            <div class="timeblock-time">${formatTimeRange(block.start, block.end)}</div>
-            <div class="timeblock-title">${escapeHtml(block.title)}</div>
-            <div class="resize-handle resize-handle-bottom"></div>
-          `;
-        }
-
+        `;
+        el.innerHTML = innerContent;
         timelineTrack.appendChild(el);
       });
 
-      // Add now line
       updateNowLine();
     }
 
@@ -786,7 +727,6 @@ document.addEventListener('DOMContentLoaded', () => {
       nowLine.style.top = `${top}px`;
       nowLine.querySelector('.now-time').textContent = formatDecimalTime(now);
 
-      // Update current block highlighting
       document.querySelectorAll('.timeblock').forEach(block => {
         const blockTop = parseFloat(block.style.top);
         const blockHeight = parseFloat(block.style.height);
@@ -803,7 +743,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function startNowLineUpdates() {
       if (nowLineInterval) clearInterval(nowLineInterval);
-      nowLineInterval = setInterval(updateNowLine, 60000); // Update every minute
+      nowLineInterval = setInterval(updateNowLine, 60000); 
     }
 
     function scrollToNow() {
@@ -818,18 +758,21 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Render Unscheduled
+    // Render Unscheduled - MODIFIED to split Done/Todo
     function renderUnscheduled(items) {
-      if (items.length === 0) {
-        unscheduled.classList.add('hidden');
-        return;
-      }
-
+      // Clear both lists
       unscheduledList.innerHTML = '';
+      doneList.innerHTML = '';
+
+      let todoCount = 0;
+      let doneCount = 0;
+
+      // Iterate through items and place them in the correct section
+      // We keep the original 'index' from the main array so updates work correctly
       items.forEach((item, index) => {
         const el = document.createElement('div');
         el.className = 'unscheduled-item' + (item.checked ? ' checked' : '');
-        el.dataset.index = index;
+        el.dataset.index = index; // Store original index
         if (item.id) el.dataset.blockId = item.id;
         el.draggable = true;
 
@@ -853,7 +796,7 @@ document.addEventListener('DOMContentLoaded', () => {
           el.classList.remove('hovered');
         });
 
-        // Drag events for unscheduled items
+        // Drag events
         el.addEventListener('dragstart', (e) => {
           el.classList.add('dragging');
           e.dataTransfer.setData('text/plain', JSON.stringify({
@@ -870,9 +813,38 @@ document.addEventListener('DOMContentLoaded', () => {
           el.classList.remove('dragging');
         });
 
-        // Touch drag and swipe for mobile
-        // Swipe left = immediate delete, Long press = drag to move
-        el.addEventListener('touchstart', (e) => {
+        // Touch drag logic (same as before)
+        setupTouchDrag(el, index, item);
+
+        el.appendChild(checkbox);
+        el.appendChild(text);
+
+        // Place in correct list
+        if (item.checked) {
+            doneList.appendChild(el);
+            doneCount++;
+        } else {
+            unscheduledList.appendChild(el);
+            todoCount++;
+        }
+      });
+
+      // Manage visibility of sections
+      if (todoCount === 0) {
+        unscheduledSection.classList.add('hidden');
+      } else {
+        unscheduledSection.classList.remove('hidden');
+      }
+
+      if (doneCount === 0) {
+        doneSection.classList.add('hidden');
+      } else {
+        doneSection.classList.remove('hidden');
+      }
+    }
+
+    function setupTouchDrag(el, index, item) {
+       el.addEventListener('touchstart', (e) => {
           const startTouch = e.touches[0];
           const startX = startTouch.clientX;
           const startY = startTouch.clientY;
@@ -882,7 +854,6 @@ document.addEventListener('DOMContentLoaded', () => {
           let swipeTranslate = 0;
           let longPressTimer = null;
 
-          // Long press timer - after 200ms, ready for drag
           longPressTimer = setTimeout(() => {
             isDragReady = true;
             el.style.opacity = '0.7';
@@ -895,7 +866,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (isDragging) return;
 
-            // Swipe left to delete (immediate, no long press needed)
             if (!isSwiping && !isDragReady && deltaX < -15 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
               clearTimeout(longPressTimer);
               isSwiping = true;
@@ -909,14 +879,12 @@ document.addEventListener('DOMContentLoaded', () => {
               return;
             }
 
-            // Before long press, vertical movement = scroll (cancel)
             if (!isDragReady && Math.abs(deltaY) > 10) {
               clearTimeout(longPressTimer);
               cleanup();
               return;
             }
 
-            // After long press, any movement starts drag
             if (isDragReady && (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5)) {
               moveEvent.preventDefault();
               isDragging = true;
@@ -954,13 +922,6 @@ document.addEventListener('DOMContentLoaded', () => {
           el.addEventListener('touchend', cleanup);
           el.addEventListener('touchcancel', cleanup);
         }, { passive: false });
-
-        el.appendChild(checkbox);
-        el.appendChild(text);
-        unscheduledList.appendChild(el);
-      });
-
-      unscheduled.classList.remove('hidden');
     }
 
     // Toggle unscheduled item checkbox
@@ -974,11 +935,8 @@ document.addEventListener('DOMContentLoaded', () => {
       // Update local state
       item.checked = checked;
 
-      // Update UI immediately
-      const el = unscheduledList.querySelector(`[data-index="${index}"]`);
-      if (el) {
-        el.classList.toggle('checked', checked);
-      }
+      // Re-render IMMEDIATELY to move item to the other list
+      renderUnscheduled(unscheduledBlocks);
 
       // Build new markdown
       const checkMark = checked ? 'x' : ' ';
@@ -1009,12 +967,9 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (err) {
         console.error('Failed to update item:', err);
         showSyncStatus('error', 'Update failed');
-        // Revert UI on error
+        // Revert on error
         item.checked = !checked;
-        if (el) {
-          el.classList.toggle('checked', !checked);
-          el.querySelector('.unscheduled-checkbox').checked = !checked;
-        }
+        renderUnscheduled(unscheduledBlocks);
       }
     }
 
@@ -1026,10 +981,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const blockIndex = parseInt(el.dataset.blockIndex);
         const block = scheduledBlocks[blockIndex];
 
-        // Make draggable for cross-zone drag-and-drop
         el.draggable = true;
 
-        // Hover tracking
         el.addEventListener('mouseenter', () => {
           hoveredBlock = el;
           el.classList.add('hovered');
@@ -1040,7 +993,6 @@ document.addEventListener('DOMContentLoaded', () => {
           el.classList.remove('hovered');
         });
 
-        // HTML5 drag events for dropping into unscheduled
         el.addEventListener('dragstart', (e) => {
           if (!block) return;
           el.classList.add('dragging');
@@ -1060,8 +1012,7 @@ document.addEventListener('DOMContentLoaded', () => {
           el.classList.remove('dragging');
         });
 
-        // Touch drag and swipe for mobile
-        // Swipe left = immediate delete, Long press = drag to move
+        // Touch drag block logic
         el.addEventListener('touchstart', (e) => {
           if (!block || el.classList.contains('editing')) return;
           const startTouch = e.touches[0];
@@ -1073,7 +1024,6 @@ document.addEventListener('DOMContentLoaded', () => {
           let swipeTranslate = 0;
           let longPressTimer = null;
 
-          // Long press timer - after 200ms, ready for drag
           longPressTimer = setTimeout(() => {
             isDragReady = true;
             el.style.opacity = '0.7';
@@ -1086,7 +1036,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (isDragging) return;
 
-            // Swipe left to delete (immediate, no long press needed)
             if (!isSwiping && !isDragReady && deltaX < -15 && Math.abs(deltaX) > Math.abs(deltaY) * 1.5) {
               clearTimeout(longPressTimer);
               isSwiping = true;
@@ -1100,14 +1049,12 @@ document.addEventListener('DOMContentLoaded', () => {
               return;
             }
 
-            // Before long press, vertical movement = scroll (cancel)
             if (!isDragReady && Math.abs(deltaY) > 10) {
               clearTimeout(longPressTimer);
               cleanup();
               return;
             }
 
-            // After long press, any movement starts drag
             if (isDragReady && (Math.abs(deltaX) > 5 || Math.abs(deltaY) > 5)) {
               moveEvent.preventDefault();
               isDragging = true;
@@ -1148,7 +1095,6 @@ document.addEventListener('DOMContentLoaded', () => {
           el.addEventListener('touchcancel', cleanup);
         }, { passive: false });
 
-        // Resize handles
         const topHandle = el.querySelector('.resize-handle-top');
         const bottomHandle = el.querySelector('.resize-handle-bottom');
 
@@ -1162,7 +1108,6 @@ document.addEventListener('DOMContentLoaded', () => {
           startResize(el, e, 'bottom', false);
         });
 
-        // Touch resize for mobile (immediate, no long press)
         topHandle.addEventListener('touchstart', (e) => {
           e.stopPropagation();
           e.preventDefault();
@@ -1175,11 +1120,10 @@ document.addEventListener('DOMContentLoaded', () => {
           startResize(el, e, 'bottom', true);
         }, { passive: false });
 
-        // Checkbox handler for task timeblocks
         const checkbox = el.querySelector('.timeblock-checkbox');
         if (checkbox) {
           checkbox.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent drag
+            e.stopPropagation(); 
           });
           checkbox.addEventListener('change', () => {
             toggleTaskTimeblock(blockIndex, checkbox.checked);
@@ -1187,7 +1131,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // Keyboard handler for delete
       document.addEventListener('keydown', handleKeydown);
     }
 
@@ -1199,16 +1142,13 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Update local state
       block.checked = checked;
 
-      // Update UI immediately
       const el = timelineTrack.querySelector(`[data-block-index="${index}"]`);
       if (el) {
         el.classList.toggle('checked', checked);
       }
 
-      // Build new markdown
       const startStr = decimalToTimeString(block.start);
       const endStr = decimalToTimeString(block.end);
       const checkMark = checked ? 'x' : ' ';
@@ -1239,7 +1179,6 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (err) {
         console.error('Failed to update task:', err);
         showSyncStatus('error', 'Update failed');
-        // Revert UI on error
         block.checked = !checked;
         if (el) {
           el.classList.toggle('checked', !checked);
@@ -1251,7 +1190,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleKeydown(e) {
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        // Don't delete if typing in an input
         if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
           return;
         }
@@ -1293,21 +1231,11 @@ document.addEventListener('DOMContentLoaded', () => {
           throw new Error(`Failed to delete: ${response.status}`);
         }
 
-        // Remove from DOM
-        el.remove();
-
         // Remove from local state
         unscheduledBlocks.splice(index, 1);
-
-        // Update indices on remaining items
-        unscheduledList.querySelectorAll('.unscheduled-item').forEach((item, i) => {
-          item.dataset.index = i;
-        });
-
-        // Hide section if empty
-        if (unscheduledBlocks.length === 0) {
-          unscheduled.classList.add('hidden');
-        }
+        
+        // Re-render to update UI and indices
+        renderUnscheduled(unscheduledBlocks);
 
         hoveredUnscheduledItem = null;
         showSyncStatus('saved', 'Deleted');
@@ -1317,7 +1245,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Drag functionality
+    // Drag functionality (startDrag, startResize etc...)
     function startDrag(el, e) {
       e.preventDefault();
       el.classList.add('dragging');
@@ -1330,16 +1258,10 @@ document.addEventListener('DOMContentLoaded', () => {
       function onMouseMove(e) {
         const deltaY = e.clientY - startY;
         let newTop = startTop + deltaY;
-
-        // Snap to 15-minute increments (15px = 15 min at 60px/hour)
         newTop = Math.round(newTop / 15) * 15;
-
-        // Clamp to valid range
         newTop = Math.max(0, Math.min(maxTop, newTop));
-
         el.style.top = `${newTop}px`;
 
-        // Update time display
         const newStart = newTop / HOUR_HEIGHT + START_HOUR;
         const duration = blockHeight / HOUR_HEIGHT;
         const newEnd = newStart + duration;
@@ -1354,7 +1276,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.removeEventListener('mousemove', onMouseMove);
         document.removeEventListener('mouseup', onMouseUp);
 
-        // Calculate new times and update
         const newTop = parseFloat(el.style.top);
         const blockHeight = parseFloat(el.style.height);
         const newStart = newTop / HOUR_HEIGHT + START_HOUR;
@@ -1367,7 +1288,6 @@ document.addEventListener('DOMContentLoaded', () => {
       document.addEventListener('mouseup', onMouseUp);
     }
 
-    // Resize functionality
     function startResize(el, e, edge, isTouch = false) {
       e.preventDefault();
       el.classList.add('resizing');
@@ -1375,7 +1295,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const startY = isTouch ? e.touches[0].clientY : e.clientY;
       const startTop = parseFloat(el.style.top);
       const startHeight = parseFloat(el.style.height);
-      const minHeight = 15; // 15 minutes minimum
+      const minHeight = 15; 
 
       function onMove(e) {
         if (isTouch) e.preventDefault();
@@ -1385,15 +1305,11 @@ document.addEventListener('DOMContentLoaded', () => {
         let newHeight = startHeight;
 
         if (edge === 'top') {
-          // Dragging top edge - changes start time
           newTop = startTop + deltaY;
           newHeight = startHeight - deltaY;
-
-          // Snap to 15-minute increments
           newTop = Math.round(newTop / 15) * 15;
           newHeight = startHeight + startTop - newTop;
 
-          // Clamp
           if (newTop < 0) {
             newTop = 0;
             newHeight = startHeight + startTop;
@@ -1403,13 +1319,8 @@ document.addEventListener('DOMContentLoaded', () => {
             newTop = startTop + startHeight - minHeight;
           }
         } else {
-          // Dragging bottom edge - changes end time
           newHeight = startHeight + deltaY;
-
-          // Snap to 15-minute increments
           newHeight = Math.round(newHeight / 15) * 15;
-
-          // Clamp
           newHeight = Math.max(minHeight, newHeight);
           const maxHeight = TOTAL_HOURS * HOUR_HEIGHT - startTop;
           newHeight = Math.min(maxHeight, newHeight);
@@ -1418,7 +1329,6 @@ document.addEventListener('DOMContentLoaded', () => {
         el.style.top = `${newTop}px`;
         el.style.height = `${newHeight}px`;
 
-        // Update time display
         const newStart = newTop / HOUR_HEIGHT + START_HOUR;
         const newEnd = newStart + newHeight / HOUR_HEIGHT;
         const timeEl = el.querySelector('.timeblock-time');
@@ -1438,7 +1348,6 @@ document.addEventListener('DOMContentLoaded', () => {
           document.removeEventListener('mouseup', onEnd);
         }
 
-        // Calculate new times and update
         const newTop = parseFloat(el.style.top);
         const newHeight = parseFloat(el.style.height);
         const newStart = newTop / HOUR_HEIGHT + START_HOUR;
@@ -1477,21 +1386,18 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (status === 'saved') {
         syncIndicator.innerHTML = '<svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>';
         syncText.textContent = message || 'Saved';
-        // Auto-hide after 2 seconds
         syncHideTimeout = setTimeout(() => {
           syncStatus.classList.remove('visible');
         }, 2000);
       } else if (status === 'error') {
         syncIndicator.innerHTML = '<svg class="sync-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 18L18 6M6 6l12 12"/></svg>';
         syncText.textContent = message || 'Error';
-        // Auto-hide after 3 seconds
         syncHideTimeout = setTimeout(() => {
           syncStatus.classList.remove('visible');
         }, 3000);
       }
     }
 
-    // Convert decimal time to formatted string for markdown
     function decimalToTimeString(decimal) {
       const hours = Math.floor(decimal);
       const minutes = Math.round((decimal - hours) * 60);
@@ -1500,7 +1406,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return `${displayHours}:${minutes.toString().padStart(2, '0')} ${period}`;
     }
 
-    // Update block time in Craft
     async function updateBlockTime(el, newStart, newEnd) {
       const blockIndex = parseInt(el.dataset.blockIndex);
       const block = scheduledBlocks[blockIndex];
@@ -1510,11 +1415,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Update local state
       block.start = newStart;
       block.end = newEnd;
 
-      // Build new markdown
       const newStartStr = decimalToTimeString(newStart);
       const newEndStr = decimalToTimeString(newEnd);
       const newMarkdown = `\`${newStartStr} - ${newEndStr}\` - ${block.title}`;
@@ -1539,7 +1442,6 @@ document.addEventListener('DOMContentLoaded', () => {
           throw new Error(`Failed to update: ${response.status}`);
         }
 
-        // Update stored markdown
         block.originalMarkdown = newMarkdown;
         showSyncStatus('saved', 'Saved');
       } catch (err) {
@@ -1548,7 +1450,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Delete block from Craft
     async function deleteBlock(el) {
       const blockIndex = parseInt(el.dataset.blockIndex);
       const block = scheduledBlocks[blockIndex];
@@ -1575,13 +1476,8 @@ document.addEventListener('DOMContentLoaded', () => {
           throw new Error(`Failed to delete: ${response.status}`);
         }
 
-        // Remove from DOM
         el.remove();
-
-        // Remove from local state
         scheduledBlocks.splice(blockIndex, 1);
-
-        // Update indices on remaining blocks
         timelineTrack.querySelectorAll('.timeblock').forEach((block, i) => {
           block.dataset.blockIndex = i;
         });
@@ -1594,7 +1490,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Click-to-Create on Timeline
     let editingBlock = null;
 
     function formatTimeForMarkdown(hour24, min) {
@@ -1604,15 +1499,14 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function createInlineTimeblock(startDecimal) {
-      // Remove any existing editing block
       if (editingBlock) {
         editingBlock.remove();
         editingBlock = null;
       }
 
-      const endDecimal = startDecimal + 1; // 1 hour duration
+      const endDecimal = startDecimal + 1; 
       const top = (startDecimal - START_HOUR) * HOUR_HEIGHT;
-      const height = HOUR_HEIGHT; // 1 hour
+      const height = HOUR_HEIGHT; 
 
       const el = document.createElement('div');
       el.className = 'timeblock default editing';
@@ -1636,7 +1530,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const input = el.querySelector('.timeblock-title-input');
       input.focus();
 
-      // Handle keyboard events
       input.addEventListener('keydown', async (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -1646,9 +1539,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // Handle blur (click outside)
       input.addEventListener('blur', async () => {
-        // Small delay to allow for intentional clicks
         setTimeout(async () => {
           if (editingBlock && editingBlock.contains(input)) {
             const title = input.value.trim();
@@ -1681,11 +1572,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const endStr = formatTimeForMarkdown(endHour, endMin);
       const markdown = `\`${startStr} - ${endStr}\` - ${title}`;
 
-      // Transform editing block to final timeblock (optimistic update)
       if (editingBlock) {
         const newBlockIndex = scheduledBlocks.length;
         const newBlock = {
-          id: null, // Will be updated after API response
+          id: null, 
           start: startDecimal,
           end: endDecimal,
           title: title,
@@ -1694,7 +1584,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         scheduledBlocks.push(newBlock);
 
-        // Update element to final state
         editingBlock.classList.remove('editing');
         editingBlock.dataset.blockIndex = newBlockIndex;
         editingBlock.innerHTML = `
@@ -1731,7 +1620,6 @@ document.addEventListener('DOMContentLoaded', () => {
             throw new Error(`Failed to create: ${response.status}`);
           }
 
-          // Parse response to get block ID (API returns { items: [...] })
           const result = await response.json();
           const createdBlock = result.items?.[0] || result.blocks?.[0];
           if (createdBlock?.id) {
@@ -1739,14 +1627,12 @@ document.addEventListener('DOMContentLoaded', () => {
             savedBlock.dataset.blockId = newBlock.id;
           }
 
-          // Now setup interactions - the block object has ID set
           setupInteractions();
 
           showSyncStatus('saved', 'Created');
         } catch (err) {
           console.error('Failed to create block:', err);
           showSyncStatus('error', 'Create failed');
-          // Remove the optimistically added block
           savedBlock.remove();
           scheduledBlocks.pop();
         }
@@ -1760,44 +1646,35 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Click handler for timeline track
     timelineTrack.addEventListener('click', (e) => {
-      // Ignore clicks on existing timeblocks or their children
       if (e.target.closest('.timeblock') && !e.target.closest('.timeblock.editing')) {
         return;
       }
 
-      // Ignore if clicking on now-line
       if (e.target.closest('.now-line')) {
         return;
       }
 
-      // Calculate time from click position
       const rect = timelineTrack.getBoundingClientRect();
       const y = e.clientY - rect.top;
 
-      // Convert to time (snap to 15-minute intervals)
       let startDecimal = y / HOUR_HEIGHT + START_HOUR;
-      startDecimal = Math.round(startDecimal * 4) / 4; // Snap to 15 min
+      startDecimal = Math.round(startDecimal * 4) / 4; 
 
-      // Clamp to valid range
       startDecimal = Math.max(START_HOUR, Math.min(END_HOUR - 1, startDecimal));
 
       createInlineTimeblock(startDecimal);
     });
 
-    // Spacebar handler for creating unscheduled tasks
     let editingUnscheduledItem = null;
 
     function createInlineUnscheduledTask() {
-      // Remove any existing editing item
       if (editingUnscheduledItem) {
         editingUnscheduledItem.remove();
         editingUnscheduledItem = null;
       }
 
-      // Ensure unscheduled section is visible
-      unscheduled.classList.remove('hidden');
+      unscheduledSection.classList.remove('hidden');
 
       const el = document.createElement('div');
       el.className = 'unscheduled-item editing';
@@ -1815,12 +1692,10 @@ document.addEventListener('DOMContentLoaded', () => {
       el.appendChild(checkbox);
       el.appendChild(input);
 
-      // Add at the top of the list
       unscheduledList.insertBefore(el, unscheduledList.firstChild);
       editingUnscheduledItem = el;
       input.focus();
 
-      // Handle keyboard events
       input.addEventListener('keydown', async (e) => {
         if (e.key === 'Enter') {
           e.preventDefault();
@@ -1830,7 +1705,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // Handle blur
       input.addEventListener('blur', async () => {
         setTimeout(async () => {
           if (editingUnscheduledItem && editingUnscheduledItem.contains(input)) {
@@ -1854,64 +1728,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const markdown = `- [ ] ${title}`;
 
-      // Transform editing item to final item (optimistic update)
       if (editingUnscheduledItem) {
         const newItemIndex = unscheduledBlocks.length;
         const newItem = {
-          id: null, // Will be updated after API response
+          id: null, 
           text: title,
           checked: false,
           originalMarkdown: markdown
         };
         unscheduledBlocks.push(newItem);
 
-        // Update element to final state
-        editingUnscheduledItem.classList.remove('editing');
-        editingUnscheduledItem.dataset.index = newItemIndex;
-        editingUnscheduledItem.draggable = true;
-        editingUnscheduledItem.innerHTML = '';
+        // Re-render to update the list
+        renderUnscheduled(unscheduledBlocks);
 
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.className = 'unscheduled-checkbox';
-        checkbox.checked = false;
-        checkbox.addEventListener('change', () => toggleUnscheduledItem(newItemIndex, checkbox.checked));
-
-        const text = document.createElement('span');
-        text.className = 'unscheduled-text';
-        text.textContent = title;
-
-        editingUnscheduledItem.appendChild(checkbox);
-        editingUnscheduledItem.appendChild(text);
-
-        // Setup hover for delete
-        const el = editingUnscheduledItem;
-        el.addEventListener('mouseenter', () => {
-          hoveredUnscheduledItem = el;
-          el.classList.add('hovered');
-        });
-        el.addEventListener('mouseleave', () => {
-          if (hoveredUnscheduledItem === el) hoveredUnscheduledItem = null;
-          el.classList.remove('hovered');
-        });
-
-        // Setup drag events
-        el.addEventListener('dragstart', (e) => {
-          el.classList.add('dragging');
-          e.dataTransfer.setData('text/plain', JSON.stringify({
-            type: 'unscheduled',
-            index: newItemIndex,
-            blockId: newItem.id,
-            text: title,
-            checked: false
-          }));
-          e.dataTransfer.effectAllowed = 'move';
-        });
-        el.addEventListener('dragend', () => {
-          el.classList.remove('dragging');
-        });
-
-        const savedItem = editingUnscheduledItem;
+        // Find the new element we just rendered
+        const el = unscheduledList.querySelector(`[data-index="${newItemIndex}"]`);
+        
+        // Remove the editor if it still exists (it should be gone due to re-render, but safe to clear ref)
         editingUnscheduledItem = null;
 
         showSyncStatus('saving', 'Creating...');
@@ -1938,25 +1771,19 @@ document.addEventListener('DOMContentLoaded', () => {
             throw new Error(`Failed to create: ${response.status}`);
           }
 
-          // Parse response to get block ID (API returns { items: [...] })
           const result = await response.json();
           const createdBlock = result.items?.[0] || result.blocks?.[0];
           if (createdBlock?.id) {
             newItem.id = createdBlock.id;
-            savedItem.dataset.blockId = newItem.id;
+            if (el) el.dataset.blockId = newItem.id;
           }
 
           showSyncStatus('saved', 'Created');
         } catch (err) {
           console.error('Failed to create task:', err);
           showSyncStatus('error', 'Create failed');
-          // Remove the optimistically added item
-          savedItem.remove();
           unscheduledBlocks.pop();
-          // Hide section if now empty
-          if (unscheduledBlocks.length === 0) {
-            unscheduled.classList.add('hidden');
-          }
+          renderUnscheduled(unscheduledBlocks);
         }
       }
     }
@@ -1966,13 +1793,9 @@ document.addEventListener('DOMContentLoaded', () => {
         editingUnscheduledItem.remove();
         editingUnscheduledItem = null;
       }
-      // Hide unscheduled section if empty
-      if (unscheduledBlocks.length === 0 && !editingUnscheduledItem) {
-        unscheduled.classList.add('hidden');
-      }
+      renderUnscheduled(unscheduledBlocks); // Clean up empty states
     }
 
-    // Global keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
       const modalOpen = !settingsModal.classList.contains('hidden');
@@ -1983,7 +1806,6 @@ document.addEventListener('DOMContentLoaded', () => {
         createInlineUnscheduledTask();
       }
 
-      // Arrow keys for date navigation
       if (e.key === 'ArrowLeft' && !isTyping && !modalOpen && appVisible) {
         e.preventDefault();
         goToPrevDay();
@@ -1994,18 +1816,42 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // Drag-and-drop between timeline and unscheduled
     let dropIndicator = null;
     let unscheduledWasHidden = false;
 
-    // Show unscheduled section as drop target when dragging from timeline
+    // Helper to attach drop events to a section
+    function setupDropZone(section) {
+        section.addEventListener('dragover', (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          section.classList.add('drag-over');
+        });
+    
+        section.addEventListener('dragleave', (e) => {
+          if (!section.contains(e.relatedTarget)) {
+            section.classList.remove('drag-over');
+          }
+        });
+    
+        section.addEventListener('drop', async (e) => {
+          e.preventDefault();
+          section.classList.remove('drag-over');
+    
+          try {
+            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+            if (data.type !== 'scheduled') return;
+            await convertTimeblockToUnscheduled(data);
+          } catch (err) {
+            console.error('Drop error:', err);
+          }
+        });
+    }
+
     document.addEventListener('dragstart', (e) => {
       const timeblock = e.target.closest('.timeblock');
       if (timeblock && !timeblock.classList.contains('editing')) {
-        // Capture mouse offset within the block
         const blockRect = timeblock.getBoundingClientRect();
         currentDragOffset = e.clientY - blockRect.top;
-        // Capture duration from the block being dragged
         const blockIndex = parseInt(timeblock.dataset.blockIndex);
         if (!isNaN(blockIndex) && scheduledBlocks[blockIndex]) {
           const block = scheduledBlocks[blockIndex];
@@ -2013,33 +1859,29 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
           currentDragDuration = 1;
         }
-        // Show unscheduled section as a drop target
-        if (unscheduled.classList.contains('hidden')) {
+        if (unscheduledSection.classList.contains('hidden')) {
           unscheduledWasHidden = true;
-          unscheduled.classList.remove('hidden');
+          unscheduledSection.classList.remove('hidden');
           unscheduledList.innerHTML = '<div class="unscheduled-drop-indicator">Drop here to unschedule</div>';
         }
       } else {
-        // Dragging unscheduled item - default 1 hour, no offset
         currentDragDuration = 1;
         currentDragOffset = 0;
       }
     });
 
     document.addEventListener('dragend', (e) => {
-      // Hide unscheduled section if it was hidden before
       if (unscheduledWasHidden) {
         unscheduledWasHidden = false;
-        if (unscheduledBlocks.length === 0) {
-          unscheduled.classList.add('hidden');
+        if (unscheduledBlocks.filter(b => !b.checked).length === 0) {
+          unscheduledSection.classList.add('hidden');
           unscheduledList.innerHTML = '';
         }
       }
-      // Remove drop indicator class
-      unscheduled.classList.remove('drag-over');
+      unscheduledSection.classList.remove('drag-over');
+      doneSection.classList.remove('drag-over');
     });
 
-    // Touch drag support for mobile
     function startTouchDrag(e, data, sourceElement, isTimeblock) {
       e.preventDefault();
 
@@ -2048,18 +1890,15 @@ document.addEventListener('DOMContentLoaded', () => {
       touchDragSource = sourceElement;
       touchStartY = touch.clientY;
 
-      // Set duration for timeblocks
       if (isTimeblock && data.start !== undefined && data.end !== undefined) {
         currentDragDuration = data.end - data.start;
       } else {
         currentDragDuration = 1;
       }
 
-      // Calculate offset within the element
       const rect = sourceElement.getBoundingClientRect();
       currentDragOffset = touch.clientY - rect.top;
 
-      // Create ghost element
       touchDragGhost = document.createElement('div');
       touchDragGhost.className = 'touch-drag-ghost ' + (isTimeblock ? 'timeblock-ghost' : 'unscheduled-ghost');
       touchDragGhost.textContent = data.title || data.text;
@@ -2067,14 +1906,12 @@ document.addEventListener('DOMContentLoaded', () => {
       touchDragGhost.style.top = `${touch.clientY - 20}px`;
       document.body.appendChild(touchDragGhost);
 
-      // Hide original and prevent scroll
       sourceElement.classList.add('dragging');
       document.body.classList.add('touch-dragging');
 
-      // Show unscheduled drop zone if dragging from timeline
-      if (isTimeblock && unscheduled.classList.contains('hidden')) {
+      if (isTimeblock && unscheduledSection.classList.contains('hidden')) {
         unscheduledWasHidden = true;
-        unscheduled.classList.remove('hidden');
+        unscheduledSection.classList.remove('hidden');
         unscheduledList.innerHTML = '<div class="unscheduled-drop-indicator">Drop here to unschedule</div>';
       }
     }
@@ -2085,28 +1922,24 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const touch = e.touches[0];
 
-      // Move ghost
       if (touchDragGhost) {
         touchDragGhost.style.left = `${touch.clientX - 75}px`;
         touchDragGhost.style.top = `${touch.clientY - 20}px`;
       }
 
-      // Check if over timeline
       const timelineRect = timelineTrack.getBoundingClientRect();
       if (touch.clientX >= timelineRect.left && touch.clientX <= timelineRect.right &&
           touch.clientY >= timelineRect.top && touch.clientY <= timelineRect.bottom) {
 
-        // Calculate drop position
         const y = touch.clientY - timelineRect.top - currentDragOffset;
         let startDecimal = y / HOUR_HEIGHT + START_HOUR;
-        startDecimal = Math.round(startDecimal * 4) / 4; // Snap to 15 min
+        startDecimal = Math.round(startDecimal * 4) / 4; 
         startDecimal = Math.max(START_HOUR, Math.min(END_HOUR - currentDragDuration, startDecimal));
 
         const top = (startDecimal - START_HOUR) * HOUR_HEIGHT;
         const height = currentDragDuration * HOUR_HEIGHT;
         const endDecimal = startDecimal + currentDragDuration;
 
-        // Show drop indicator
         if (!dropIndicator) {
           dropIndicator = document.createElement('div');
           dropIndicator.className = 'drop-indicator';
@@ -2117,22 +1950,20 @@ document.addEventListener('DOMContentLoaded', () => {
         dropIndicator.style.height = `${height}px`;
         dropIndicator.textContent = formatTimeRange(startDecimal, endDecimal);
         timelineTrack.classList.add('drag-over');
-        unscheduled.classList.remove('drag-over');
+        unscheduledSection.classList.remove('drag-over');
       } else {
-        // Remove timeline indicator
         if (dropIndicator) {
           dropIndicator.remove();
           dropIndicator = null;
         }
         timelineTrack.classList.remove('drag-over');
 
-        // Check if over unscheduled
-        const unscheduledRect = unscheduled.getBoundingClientRect();
+        const unscheduledRect = unscheduledSection.getBoundingClientRect();
         if (touch.clientX >= unscheduledRect.left && touch.clientX <= unscheduledRect.right &&
             touch.clientY >= unscheduledRect.top && touch.clientY <= unscheduledRect.bottom) {
-          unscheduled.classList.add('drag-over');
+          unscheduledSection.classList.add('drag-over');
         } else {
-          unscheduled.classList.remove('drag-over');
+          unscheduledSection.classList.remove('drag-over');
         }
       }
     }
@@ -2142,13 +1973,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
       const touch = e.changedTouches[0];
 
-      // Determine drop zone
       const timelineRect = timelineTrack.getBoundingClientRect();
-      const unscheduledRect = unscheduled.getBoundingClientRect();
+      const unscheduledRect = unscheduledSection.getBoundingClientRect();
 
       if (touch.clientX >= timelineRect.left && touch.clientX <= timelineRect.right &&
           touch.clientY >= timelineRect.top && touch.clientY <= timelineRect.bottom) {
-        // Drop on timeline
         const y = touch.clientY - timelineRect.top - currentDragOffset;
         let startDecimal = y / HOUR_HEIGHT + START_HOUR;
         startDecimal = Math.round(startDecimal * 4) / 4;
@@ -2162,13 +1991,11 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       } else if (touch.clientX >= unscheduledRect.left && touch.clientX <= unscheduledRect.right &&
                  touch.clientY >= unscheduledRect.top && touch.clientY <= unscheduledRect.bottom) {
-        // Drop on unscheduled
         if (touchDragData.type === 'scheduled') {
           await convertTimeblockToUnscheduled(touchDragData);
         }
       }
 
-      // Cleanup
       cleanupTouchDrag();
     }
 
@@ -2189,36 +2016,30 @@ document.addEventListener('DOMContentLoaded', () => {
       touchDragData = null;
       document.body.classList.remove('touch-dragging');
       timelineTrack.classList.remove('drag-over');
-      unscheduled.classList.remove('drag-over');
+      unscheduledSection.classList.remove('drag-over');
 
-      // Restore unscheduled visibility
       if (unscheduledWasHidden) {
         unscheduledWasHidden = false;
-        if (unscheduledBlocks.length === 0) {
-          unscheduled.classList.add('hidden');
-          unscheduledList.innerHTML = '';
-        } else {
-          renderUnscheduled(unscheduledBlocks);
-        }
+        // Re-check logic for hiding/showing handled by renderUnscheduled usually,
+        // but touch drag cleanup might need manual check.
+        // For simplicity, just re-render to ensure correct state:
+        renderUnscheduled(unscheduledBlocks);
       }
     }
 
-    // Global touch handlers
     document.addEventListener('touchmove', handleTouchMove, { passive: false });
     document.addEventListener('touchend', endTouchDrag);
     document.addEventListener('touchcancel', cleanupTouchDrag);
 
-    // Timeline drop zone - for dropping unscheduled items to become timeblocks
     timelineTrack.addEventListener('dragover', (e) => {
       e.preventDefault();
       e.dataTransfer.dropEffect = 'move';
 
       try {
-        // Show drop indicator at cursor position, accounting for grab offset
         const rect = timelineTrack.getBoundingClientRect();
         const y = e.clientY - rect.top - currentDragOffset;
         let startDecimal = y / HOUR_HEIGHT + START_HOUR;
-        startDecimal = Math.round(startDecimal * 4) / 4; // Snap to 15 min
+        startDecimal = Math.round(startDecimal * 4) / 4; 
         startDecimal = Math.max(START_HOUR, Math.min(END_HOUR - currentDragDuration, startDecimal));
 
         const top = (startDecimal - START_HOUR) * HOUR_HEIGHT;
@@ -2241,7 +2062,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     timelineTrack.addEventListener('dragleave', (e) => {
-      // Only remove if leaving the track entirely
       if (!timelineTrack.contains(e.relatedTarget)) {
         timelineTrack.classList.remove('drag-over');
         if (dropIndicator) {
@@ -2263,7 +2083,6 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         const data = JSON.parse(e.dataTransfer.getData('text/plain'));
 
-        // Calculate drop time, accounting for grab offset
         const rect = timelineTrack.getBoundingClientRect();
         const y = e.clientY - rect.top - currentDragOffset;
         let startDecimal = y / HOUR_HEIGHT + START_HOUR;
@@ -2271,11 +2090,9 @@ document.addEventListener('DOMContentLoaded', () => {
         startDecimal = Math.max(START_HOUR, Math.min(END_HOUR - currentDragDuration, startDecimal));
 
         if (data.type === 'unscheduled') {
-          // Convert unscheduled to timeblock
-          const endDecimal = startDecimal + 1; // 1 hour duration
+          const endDecimal = startDecimal + 1; 
           await convertUnscheduledToTimeblock(data, startDecimal, endDecimal);
         } else if (data.type === 'scheduled') {
-          // Reposition scheduled block within timeline
           const duration = data.end - data.start;
           const endDecimal = startDecimal + duration;
           await repositionTimeblock(data, startDecimal, endDecimal);
@@ -2285,36 +2102,6 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     });
 
-    // Unscheduled section drop zone - for dropping timeblocks to become tasks
-    unscheduled.addEventListener('dragover', (e) => {
-      e.preventDefault();
-      e.dataTransfer.dropEffect = 'move';
-      unscheduled.classList.add('drag-over');
-    });
-
-    unscheduled.addEventListener('dragleave', (e) => {
-      if (!unscheduled.contains(e.relatedTarget)) {
-        unscheduled.classList.remove('drag-over');
-      }
-    });
-
-    unscheduled.addEventListener('drop', async (e) => {
-      e.preventDefault();
-      unscheduled.classList.remove('drag-over');
-
-      try {
-        const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-
-        // Only handle drops from scheduled timeblocks
-        if (data.type !== 'scheduled') return;
-
-        await convertTimeblockToUnscheduled(data);
-      } catch (err) {
-        console.error('Drop error:', err);
-      }
-    });
-
-    // Convert unscheduled item to timeblock (add time)
     async function convertUnscheduledToTimeblock(data, startDecimal, endDecimal) {
       if (!data.blockId) {
         console.warn('Cannot convert: no block ID');
@@ -2326,7 +2113,6 @@ document.addEventListener('DOMContentLoaded', () => {
       const checkMark = data.checked ? 'x' : ' ';
       const newMarkdown = `- [${checkMark}] \`${startStr} - ${endStr}\` ${data.text}`;
 
-      // Update local state immediately (optimistic update)
       const removedItem = unscheduledBlocks.splice(data.index, 1)[0];
       const newBlock = {
         id: data.blockId,
@@ -2339,11 +2125,9 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       scheduledBlocks.push(newBlock);
 
-      // Clear hover states (old elements are being removed)
       hoveredBlock = null;
       hoveredUnscheduledItem = null;
 
-      // Re-render both sections immediately
       renderTimeline(scheduledBlocks);
       renderUnscheduled(unscheduledBlocks);
       setupInteractions();
@@ -2372,7 +2156,6 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (err) {
         console.error('Failed to convert to timeblock:', err);
         showSyncStatus('error', 'Schedule failed');
-        // Revert on error
         scheduledBlocks.pop();
         unscheduledBlocks.splice(data.index, 0, removedItem);
         renderTimeline(scheduledBlocks);
@@ -2381,18 +2164,15 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Convert timeblock to unscheduled task (remove time)
     async function convertTimeblockToUnscheduled(data) {
       if (!data.blockId) {
         console.warn('Cannot convert: no block ID');
         return;
       }
 
-      // Remove time, keep just the task (preserve checked state)
       const checkMark = data.checked ? 'x' : ' ';
       const newMarkdown = `- [${checkMark}] ${data.title}`;
 
-      // Update local state immediately (optimistic update)
       const removedBlock = scheduledBlocks.splice(data.index, 1)[0];
       const newItem = {
         id: data.blockId,
@@ -2402,11 +2182,9 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       unscheduledBlocks.push(newItem);
 
-      // Clear hover states (old elements are being removed)
       hoveredBlock = null;
       hoveredUnscheduledItem = null;
 
-      // Re-render both sections immediately
       renderTimeline(scheduledBlocks);
       renderUnscheduled(unscheduledBlocks);
       setupInteractions();
@@ -2435,7 +2213,6 @@ document.addEventListener('DOMContentLoaded', () => {
       } catch (err) {
         console.error('Failed to convert to task:', err);
         showSyncStatus('error', 'Unschedule failed');
-        // Revert on error
         unscheduledBlocks.pop();
         scheduledBlocks.splice(data.index, 0, removedBlock);
         renderTimeline(scheduledBlocks);
@@ -2444,19 +2221,16 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Add new unscheduled task from header button
     function addNewUnscheduledTask() {
       createInlineUnscheduledTask();
     }
 
-    // Reposition timeblock within timeline (change time)
     async function repositionTimeblock(data, newStart, newEnd) {
       if (!data.blockId) {
         console.warn('Cannot reposition: no block ID');
         return;
       }
 
-      // Find and update the DOM element immediately
       const el = document.querySelector(`.timeblock[data-block-index="${data.index}"]`);
       if (el) {
         const top = (newStart - START_HOUR) * HOUR_HEIGHT;
@@ -2464,14 +2238,12 @@ document.addEventListener('DOMContentLoaded', () => {
         el.style.top = `${top}px`;
         el.style.height = `${height}px`;
 
-        // Update time display
         const timeEl = el.querySelector('.timeblock-time');
         if (timeEl) {
           timeEl.textContent = `${decimalToTimeString(newStart)} - ${decimalToTimeString(newEnd)}`;
         }
       }
 
-      // Update local state
       const block = scheduledBlocks[data.index];
       if (block) {
         block.start = newStart;
@@ -2502,7 +2274,6 @@ document.addEventListener('DOMContentLoaded', () => {
           throw new Error(`Failed to update: ${response.status}`);
         }
 
-        // Update stored markdown
         if (block) {
           block.originalMarkdown = newMarkdown;
         }
@@ -2513,6 +2284,5 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
-    // Start
     init();
 });

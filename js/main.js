@@ -7,6 +7,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const TIME_SETTINGS_KEY = 'craft-timeblock-times';
     const HOUR_HEIGHT = 60; // pixels per hour
 
+    // Sidebar State
+    const SIDEBAR_KEY = 'craft-timeblock-sidebar-collapsed';
+    let isSidebarCollapsed = false;
+
     // Configurable time range (loaded from localStorage)
     let START_HOUR = 6;  // 6 AM default
     let END_HOUR = 22;   // 10 PM default
@@ -78,7 +82,76 @@ document.addEventListener('DOMContentLoaded', () => {
         showSetup();
       }
 
+      isSidebarCollapsed = localStorage.getItem(SIDEBAR_KEY) === 'true';
+      applySidebarState();
+      setupSectionToggles();
+
       setupEventListeners();
+    }
+
+    // Toggle Section Collapse
+    function setupSectionToggles() {
+      const headers = document.querySelectorAll('.collapsible-header');
+      
+      headers.forEach(header => {
+        const sectionId = header.dataset.section; // 'unscheduled' or 'done'
+        const parent = document.getElementById(sectionId);
+        const storageKey = `craft-timeblock-collapse-${sectionId}`;
+        
+        // 1. Restore state from LocalStorage
+        const isCollapsed = localStorage.getItem(storageKey) === 'true';
+        if (isCollapsed) {
+          parent.classList.add('collapsed');
+        }
+
+        // 2. Add Click Listener
+        header.addEventListener('click', () => {
+          const wasCollapsed = parent.classList.contains('collapsed');
+          if (wasCollapsed) {
+            parent.classList.remove('collapsed');
+            localStorage.setItem(storageKey, 'false');
+          } else {
+            parent.classList.add('collapsed');
+            localStorage.setItem(storageKey, 'true');
+          }
+        });
+      });
+    }
+
+    // Sidebar Logic
+    const appLayout = document.querySelector('.app-layout'); // Make sure this exists in your DOM logic or use document.querySelector inside the function
+    const sidebarToggleBtn = document.getElementById('sidebar-toggle-btn');
+    const sidebarBadge = document.getElementById('sidebar-badge');
+
+    function toggleSidebar() {
+      isSidebarCollapsed = !isSidebarCollapsed;
+      localStorage.setItem(SIDEBAR_KEY, isSidebarCollapsed);
+      applySidebarState();
+    }
+
+    function applySidebarState() {
+      const layout = document.querySelector('.app-layout');
+      if (isSidebarCollapsed) {
+        layout.classList.add('sidebar-closed');
+        sidebarToggleBtn.classList.add('active'); // Optional visual feedback
+        sidebarToggleBtn.querySelector('svg').style.opacity = '0.5'; // Dim icon when closed
+      } else {
+        layout.classList.remove('sidebar-closed');
+        sidebarToggleBtn.classList.remove('active');
+        sidebarToggleBtn.querySelector('svg').style.opacity = '1';
+      }
+    }
+
+    function updateSidebarBadge(count) {
+      if (!sidebarBadge) return;
+      
+      sidebarBadge.textContent = count;
+      
+      if (count > 0) {
+        sidebarBadge.classList.remove('hidden');
+      } else {
+        sidebarBadge.classList.add('hidden');
+      }
     }
 
     // Time settings
@@ -185,6 +258,9 @@ document.addEventListener('DOMContentLoaded', () => {
       settingsModal.addEventListener('click', (e) => {
         if (e.target === settingsModal) closeSettings();
       });
+      if (sidebarToggleBtn) {
+        sidebarToggleBtn.addEventListener('click', toggleSidebar);
+      }
 
       // Auto-save API URL on blur or enter
       settingsApiUrl.addEventListener('blur', saveSettings);
@@ -759,6 +835,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Render Unscheduled - MODIFIED to split Done/Todo
+    // Render Unscheduled - with Section Badges
     function renderUnscheduled(items) {
       // Clear both lists
       unscheduledList.innerHTML = '';
@@ -767,12 +844,12 @@ document.addEventListener('DOMContentLoaded', () => {
       let todoCount = 0;
       let doneCount = 0;
 
-      // Iterate through items and place them in the correct section
-      // We keep the original 'index' from the main array so updates work correctly
+      // Iterate and render
+     // Inside renderUnscheduled...
       items.forEach((item, index) => {
         const el = document.createElement('div');
         el.className = 'unscheduled-item' + (item.checked ? ' checked' : '');
-        el.dataset.index = index; // Store original index
+        el.dataset.index = index; 
         if (item.id) el.dataset.blockId = item.id;
         el.draggable = true;
 
@@ -786,7 +863,6 @@ document.addEventListener('DOMContentLoaded', () => {
         text.className = 'unscheduled-text';
         text.textContent = item.text;
 
-        // Hover tracking for delete
         el.addEventListener('mouseenter', () => {
           hoveredUnscheduledItem = el;
           el.classList.add('hovered');
@@ -796,7 +872,6 @@ document.addEventListener('DOMContentLoaded', () => {
           el.classList.remove('hovered');
         });
 
-        // Drag events
         el.addEventListener('dragstart', (e) => {
           el.classList.add('dragging');
           e.dataTransfer.setData('text/plain', JSON.stringify({
@@ -813,13 +888,11 @@ document.addEventListener('DOMContentLoaded', () => {
           el.classList.remove('dragging');
         });
 
-        // Touch drag logic (same as before)
         setupTouchDrag(el, index, item);
 
         el.appendChild(checkbox);
         el.appendChild(text);
 
-        // Place in correct list
         if (item.checked) {
             doneList.appendChild(el);
             doneCount++;
@@ -829,7 +902,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
 
-      // Manage visibility of sections
+      // 1. Manage Visibility of Sections
       if (todoCount === 0) {
         unscheduledSection.classList.add('hidden');
       } else {
@@ -841,7 +914,35 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         doneSection.classList.remove('hidden');
       }
+
+      // 2. Update Header Badges
+      updateSectionBadge('unscheduled-section-badge', todoCount);
+      updateSectionBadge('done-section-badge', doneCount);
+
+      // 3. Update Global Sidebar Badge
+      updateSidebarBadge(todoCount);
     }
+
+    // Helper to update specific section badges
+    function updateSectionBadge(id, count) {
+      const el = document.getElementById(id);
+      if (!el) return;
+      
+      el.textContent = count;
+      
+      if (count > 0) {
+        el.classList.remove('hidden');
+        // Optional: Add 'active' class if you want it colored
+        el.classList.add('active'); 
+      } else {
+        el.classList.add('hidden');
+        el.classList.remove('active');
+      }
+    }
+    
+    // NOTE: You'll need to move the element creation logic (createUnscheduledElement) 
+    // back inline if you didn't extract it, or use the exact loop code from the previous step.
+    // For brevity, I assumed the existing loop logic is preserved inside the forEach.
 
     function setupTouchDrag(el, index, item) {
        el.addEventListener('touchstart', (e) => {

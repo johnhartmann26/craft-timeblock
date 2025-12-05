@@ -1,4 +1,6 @@
-/* Global Styles & Variables */
+/* =========================================================
+   GLOBAL VARIABLES & THEMES
+   ========================================================= */
 :root {
   /* --- Dark Theme (Default) --- */
   --bg-color: #121212;
@@ -14,10 +16,11 @@
   --accent: #d97757;
   --accent-hover: #e88968;
   --now-line: #d97757;
+  --error: #ff6b6b;
 
   /* Glass Panes (Dark) */
   --glass-bg: rgba(30, 30, 30, 0.65);
-  --glass-border: rgba(255, 255, 255, 0.08); /* White border for dark mode */
+  --glass-border: rgba(255, 255, 255, 0.08);
   --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
   --blur-strength: 16px;
 
@@ -50,10 +53,10 @@
   --border: rgba(60, 60, 67, 0.15);
   --accent: #d97757;
   --accent-hover: #b85535;
+  --now-line: #c96442;
 
-  /* Glass Panes (Light) */
+  /* Glass Panes (Light) - Dark borders for visibility */
   --glass-bg: rgba(255, 255, 255, 0.65);
-  /* CRITICAL FIX: Dark border for light mode visibility */
   --glass-border: rgba(0, 0, 0, 0.08); 
   --glass-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.05);
 
@@ -72,7 +75,9 @@
   --card-border: rgba(0, 0, 0, 0.08);
 }
 
-/* Base Reset & Typography */
+/* =========================================================
+   BASE RESET & TYPOGRAPHY
+   ========================================================= */
 * {
   margin: 0;
   padding: 0;
@@ -87,22 +92,17 @@ body {
   color: var(--text);
   line-height: 1.5;
   min-height: 100vh;
-  /* Smoothly transition colors when theme toggles */
   transition: background-color 0.3s ease, color 0.3s ease;
   touch-action: pan-y;
   -webkit-text-size-adjust: 100%;
 }
 
-/* Utility: Glass Panel */
-.glass {
-  background: var(--glass-bg);
-  backdrop-filter: blur(var(--blur-strength));
-  -webkit-backdrop-filter: blur(var(--blur-strength));
-  border: 1px solid var(--glass-border);
-  box-shadow: var(--glass-shadow);
-}
+/* Utility: Hidden */
+.hidden { display: none !important; }
 
-/* Setup Screen */
+/* =========================================================
+   SETUP SCREEN
+   ========================================================= */
 .setup-screen {
   display: flex;
   flex-direction: column;
@@ -130,10 +130,7 @@ body {
   font-weight: 600;
   margin-bottom: 0.5rem;
   text-align: center;
-  background: linear-gradient(135deg, var(--text), var(--text-muted));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: var(--text); /* Fallback */
+  color: var(--text);
 }
 
 .setup-screen p {
@@ -190,10 +187,6 @@ body {
   transform: translateY(-1px);
 }
 
-.setup-form button:active {
-  transform: translateY(0);
-}
-
 .setup-error {
   margin-top: 1.5rem;
   padding: 1rem;
@@ -205,25 +198,24 @@ body {
   text-align: center;
 }
 
-/* Main App */
+/* =========================================================
+   MAIN APP & HEADER
+   ========================================================= */
 .app {
   max-width: 700px;
+  width: 100%;
   margin: 0 auto;
 }
 
-/* Sticky Glass Header */
 .header {
   position: sticky;
   top: 1rem;
   z-index: 100;
-  
   display: flex;
   align-items: center;
   justify-content: space-between;
-  
   margin: 0 1rem 2rem 1rem;
   padding: 0.75rem 1rem;
-  
   border-radius: 16px;
   background: var(--glass-bg);
   backdrop-filter: blur(var(--blur-strength));
@@ -290,6 +282,7 @@ body {
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
+  position: relative; /* For Badge */
 }
 
 .icon-btn:hover {
@@ -304,6 +297,31 @@ body {
 
 .icon-btn:hover svg {
   stroke: var(--text);
+}
+
+/* Sidebar Toggle Badge */
+.badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.65rem;
+  font-weight: 700;
+  height: 16px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--glass-bg);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+  z-index: 10;
+}
+
+#sidebar-toggle-btn {
+  display: none; /* Hidden on mobile */
 }
 
 /* Sync Status */
@@ -333,9 +351,10 @@ body {
   animation: spin 0.8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-.sync-icon { width: 14px; height: 14px; }
 
-/* Timeline Container */
+/* =========================================================
+   TIMELINE
+   ========================================================= */
 #timeline-container {
   padding: 0 1.5rem 2rem 1.5rem;
 }
@@ -411,7 +430,9 @@ body {
   border-radius: 4px;
 }
 
-/* Timeblock Cards */
+/* =========================================================
+   TIMEBLOCKS
+   ========================================================= */
 .timeblock {
   position: absolute;
   left: 8px;
@@ -419,13 +440,13 @@ body {
   padding: 0.5rem 0.75rem;
   border-radius: 8px;
   overflow: hidden;
-  
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
   border: 1px solid var(--card-border);
   box-shadow: 0 2px 8px rgba(0,0,0,0.05);
-  
   transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s;
+  cursor: grab;
+  touch-action: none;
 }
 
 .timeblock:hover {
@@ -459,9 +480,9 @@ body {
   box-shadow: 0 0 0 1px rgba(217, 119, 87, 0.2), 0 4px 12px rgba(0,0,0,0.1);
 }
 
-/* Drag & Resize */
-.timeblock { cursor: grab; touch-action: none; }
 .timeblock.dragging { opacity: 0.4; cursor: grabbing; }
+
+/* Resize Handles */
 .resize-handle {
   position: absolute; left: 0; right: 0; height: 10px; cursor: ns-resize; z-index: 5;
 }
@@ -493,7 +514,9 @@ body {
 }
 .timeblock.checked .timeblock-title { text-decoration: line-through; color: var(--text-muted); opacity: 0.8; }
 
-/* Unscheduled Section */
+/* =========================================================
+   UNSCHEDULED & DONE SECTIONS
+   ========================================================= */
 .unscheduled {
   margin-top: 2rem;
   padding-top: 1.5rem;
@@ -515,13 +538,11 @@ body {
   gap: 0.75rem;
   padding: 0.75rem 1rem;
   margin-bottom: 0.5rem;
-  
   background: var(--surface-bg);
   border: 1px solid var(--surface-border);
   border-radius: 12px;
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
-  
   font-size: 0.9rem;
   color: var(--text);
   transition: all 0.2s;
@@ -581,7 +602,6 @@ body {
   animation: spin 0.8s linear infinite;
   margin: 0 auto;
 }
-
 .error-state { text-align: center; padding: 4rem 2rem; color: var(--text-muted); }
 .error-state button {
   margin-top: 1rem; padding: 0.5rem 1rem;
@@ -589,7 +609,9 @@ body {
   color: var(--text); border-radius: 8px; cursor: pointer;
 }
 
-/* Settings Modal */
+/* =========================================================
+   SETTINGS MODAL
+   ========================================================= */
 .modal-overlay {
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.3);
@@ -616,7 +638,6 @@ body {
 }
 
 .modal h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1.5rem; color: var(--text); }
-
 .modal-section { margin-bottom: 1.5rem; }
 .modal label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; font-weight: 600; }
 .modal input, .modal select {
@@ -625,7 +646,6 @@ body {
   border-radius: 10px; color: var(--text); outline: none;
 }
 
-/* Theme Toggle Pill */
 .theme-toggle {
   display: inline-flex;
   background: var(--surface-bg);
@@ -669,8 +689,165 @@ body {
   margin-top: 2rem; text-align: center; font-size: 0.8rem; color: var(--text-muted);
 }
 .modal-footer a { color: var(--accent); text-decoration: none; }
-.hidden { display: none !important; }
-
-/* Time Range Row */
 .time-range-row { display: flex; align-items: center; gap: 0.5rem; }
 .time-range-row select { flex: 1; }
+
+/* =========================================================
+   RESPONSIVE LAYOUT (Grid & Sidebar)
+   ========================================================= */
+
+/* Default (Mobile/Vertical) */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+}
+
+.tasks-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 50px;
+}
+
+/* Desktop (Wide Screens) */
+@media (min-width: 900px) {
+  /* Show sidebar toggle */
+  #sidebar-toggle-btn {
+    display: flex;
+  }
+
+  /* Expand Container */
+  .app {
+    max-width: 1400px;
+    padding: 0 2rem;
+  }
+
+  /* Grid Layout */
+  .app-layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 3rem;
+    align-items: start;
+    transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  /* Sidebar Closed State */
+  .app-layout.sidebar-closed {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .app-layout.sidebar-closed .tasks-sidebar {
+    display: none;
+  }
+
+  /* Sticky Sidebar */
+  .tasks-sidebar {
+    position: sticky;
+    top: calc(1rem + 80px);
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: 0 1rem; /* Padding added to prevent touching edges */
+  }
+  .tasks-sidebar::-webkit-scrollbar { display: none; }
+
+  /* Reset Mobile Margins */
+  .unscheduled {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    margin-bottom: 2rem;
+  }
+
+  /* Sticky Section Headers (Unscheduled / Done) */
+  .unscheduled h2 {
+    position: sticky;
+    top: 0;
+    background: var(--glass-bg); /* Use glass background */
+    z-index: 10;
+    padding: 0.5rem 0.75rem; /* Padding added for text breathing room */
+    margin-bottom: 0.5rem;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--glass-border);
+    border-radius: 8px;
+  }
+
+  /* Drop Zone Styling */
+  .unscheduled.drag-over {
+    margin: -0.5rem;
+    padding: 1rem;
+    border: 2px dashed var(--accent);
+    background: rgba(217, 119, 87, 0.05);
+    border-radius: 12px;
+  }
+}
+
+/* =========================================
+   COLLAPSIBLE SECTIONS
+   ========================================= */
+
+/* Make headers clickable and align icon */
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  /* Ensure padding from previous fix is preserved */
+  padding: 0.5rem 0.75rem; 
+}
+
+.collapsible-header:hover {
+  background: var(--surface-hover);
+}
+
+/* Icon Animation */
+.chevron-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+/* Collapsed State: Rotate Icon */
+.unscheduled.collapsed .chevron-icon {
+  transform: rotate(-90deg);
+}
+
+/* Collapsed State: Hide List */
+.unscheduled.collapsed #unscheduled-list,
+.unscheduled.collapsed #done-list {
+  display: none;
+}
+/* Sidebar Header Badges */
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 20px;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  
+  font-size: 0.7rem;
+  font-weight: 600;
+  
+  /* Default styling (subtle) */
+  background: var(--surface-border);
+  color: var(--text-muted);
+  
+  transition: all 0.2s;
+}
+
+/* Highlight badge when active */
+.section-badge.active {
+  background: var(--accent);
+  color: white;
+}

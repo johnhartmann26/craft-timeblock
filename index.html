@@ -181,6 +181,36 @@
       color: var(--text);
     }
 
+    .date-nav {
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .date-nav-btn {
+      width: 28px;
+      height: 28px;
+      border: none;
+      background: transparent;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      transition: all 0.15s;
+    }
+
+    .date-nav-btn:hover {
+      background: var(--bg-hover);
+      color: var(--text);
+    }
+
+    .date-nav-btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
     .header-actions {
       display: flex;
       gap: 0.25rem;
@@ -987,7 +1017,19 @@
   <!-- Main App -->
   <div id="app" class="app hidden">
     <header class="header">
-      <h1 id="date-title">Today</h1>
+      <div class="date-nav">
+        <button class="date-nav-btn" id="prev-day-btn" title="Previous day">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"/>
+          </svg>
+        </button>
+        <h1 id="date-title">Today</h1>
+        <button class="date-nav-btn" id="next-day-btn" title="Next day">
+          <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+          </svg>
+        </button>
+      </div>
       <div class="header-actions">
         <div id="sync-status" class="sync-status">
           <span class="sync-indicator"></span>
@@ -1087,6 +1129,10 @@
           <span class="shortcut-action">Delete</span>
           <span class="shortcut-key">Backspace / Swipe left</span>
         </div>
+        <div class="shortcut-item">
+          <span class="shortcut-action">Navigate days</span>
+          <span class="shortcut-key">← / →</span>
+        </div>
       </div>
       <div class="modal-footer">
         <div class="author-line"><a href="https://github.com/eternalpriyan/craft-timeblock" target="_blank" rel="noopener">Craft Timeblock</a> by Nithya Priyan</div>
@@ -1124,6 +1170,9 @@
     let touchDragSource = null; // The original element being dragged
     let touchStartY = 0; // Starting Y position for swipe detection
 
+    // Date navigation state
+    let currentDate = new Date(); // Currently viewed date
+
     // DOM Elements
     const setupScreen = document.getElementById('setup-screen');
     const setupForm = document.getElementById('setup-form');
@@ -1145,6 +1194,8 @@
     const addTaskBtn = document.getElementById('add-task-btn');
     const settingsBtn = document.getElementById('settings-btn');
     const retryBtn = document.getElementById('retry-btn');
+    const prevDayBtn = document.getElementById('prev-day-btn');
+    const nextDayBtn = document.getElementById('next-day-btn');
 
     const settingsModal = document.getElementById('settings-modal');
     const settingsApiUrl = document.getElementById('settings-api-url');
@@ -1231,6 +1282,43 @@
       timelineTrack.style.minHeight = `${TOTAL_HOURS * HOUR_HEIGHT}px`;
     }
 
+    // Date Navigation
+    function formatDateTitle(date) {
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return `${days[date.getDay()]}, ${date.getDate()} ${months[date.getMonth()]}`;
+    }
+
+    function formatDateForApi(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+
+    function isToday(date) {
+      const today = new Date();
+      return date.getDate() === today.getDate() &&
+             date.getMonth() === today.getMonth() &&
+             date.getFullYear() === today.getFullYear();
+    }
+
+    function updateDateTitle() {
+      dateTitle.textContent = formatDateTitle(currentDate);
+    }
+
+    function goToPrevDay() {
+      currentDate.setDate(currentDate.getDate() - 1);
+      updateDateTitle();
+      loadSchedule();
+    }
+
+    function goToNextDay() {
+      currentDate.setDate(currentDate.getDate() + 1);
+      updateDateTitle();
+      loadSchedule();
+    }
+
     // Theme
     function applyTheme(theme) {
       currentTheme = theme;
@@ -1263,6 +1351,8 @@
       addTaskBtn.addEventListener('click', addNewUnscheduledTask);
       settingsBtn.addEventListener('click', openSettings);
       retryBtn.addEventListener('click', loadSchedule);
+      prevDayBtn.addEventListener('click', goToPrevDay);
+      nextDayBtn.addEventListener('click', goToNextDay);
       settingsModal.addEventListener('click', (e) => {
         if (e.target === settingsModal) closeSettings();
       });
@@ -1307,7 +1397,7 @@
     function showApp() {
       setupScreen.classList.add('hidden');
       app.classList.remove('hidden');
-      setDateTitle();
+      updateDateTitle();
       updateTimelineHeight();
       renderTimeAxis();
     }
@@ -1378,13 +1468,6 @@
       }
     }
 
-    // Date Title
-    function setDateTitle() {
-      const today = new Date();
-      const options = { weekday: 'long', month: 'long', day: 'numeric' };
-      dateTitle.textContent = today.toLocaleDateString('en-US', options);
-    }
-
     // Time Axis
     function renderTimeAxis() {
       timeAxis.innerHTML = '';
@@ -1409,8 +1492,15 @@
       showLoading();
 
       try {
-        const fetchUrl = `${apiUrl}/blocks?date=today`;
-        const response = await fetch(fetchUrl);
+        const dateParam = isToday(currentDate) ? 'today' : formatDateForApi(currentDate);
+        const fetchUrl = `${apiUrl}/blocks?date=${dateParam}`;
+        let response = await fetch(fetchUrl);
+
+        // If no daily note exists (404), create one
+        if (!response.ok && response.status === 404) {
+          await createDailyNote(dateParam);
+          response = await fetch(fetchUrl);
+        }
 
         if (!response.ok) {
           throw new Error(`Failed to fetch: ${response.status}`);
@@ -1442,6 +1532,30 @@
       }
     }
 
+    // Create a daily note for a specific date
+    async function createDailyNote(dateParam) {
+      const response = await fetch(`${apiUrl}/blocks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          blocks: [{
+            type: 'text',
+            markdown: ''
+          }],
+          position: {
+            position: 'end',
+            date: dateParam
+          }
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to create daily note: ${response.status}`);
+      }
+    }
+
     function showLoading() {
       loading.classList.remove('hidden');
       errorState.classList.add('hidden');
@@ -1467,13 +1581,16 @@
       const unscheduledItems = [];
 
       // Time pattern: flexible for 12/24 hour formats
-      // Handles: `10:00 AM - 11:00 AM` - Task (backticks wrap entire time range)
-      // Or: 9:00 AM - 10:00 AM - Task (without backticks)
-      // Or: 14:00 - 15:30 - Task (24-hour)
-      const timePattern = /^`?(\d{1,2}):(\d{2})\s*(am|pm)?\s*[-–—]+\s*(\d{1,2}):(\d{2})\s*(am|pm)?`?\s*[-–—]?\s*(.*)$/i;
+      // Handles: `10:00 AM - 11:00 AM` - Task, 10 AM - 11 AM Task, 10-11 AM: Task
+      // Separators: -, –, —, to, ->
+      // Task separators: -, :, or just space
+      // Minutes optional (defaults to :00)
+      // Shared AM/PM: "10-11 AM" means both 10 AM and 11 AM
+      const timePattern = /^`?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:[-–—]+|to|->|→)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?`?\s*(?:[-–—:]|\s)\s*(.+)$/i;
 
       // Task with time pattern: - [x] `1:00 PM - 2:00 PM` Task name
-      const taskWithTimePattern = /^-?\s*\[([ x]?)\]\s*`?(\d{1,2}):(\d{2})\s*(am|pm)?\s*[-–—]+\s*(\d{1,2}):(\d{2})\s*(am|pm)?`?\s*(.*)$/i;
+      // Same flexibility as timePattern
+      const taskWithTimePattern = /^-?\s*\[([ x]?)\]\s*`?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?\s*(?:[-–—]+|to|->|→)\s*(\d{1,2})(?::(\d{2}))?\s*(am|pm)?`?\s*(?:[-–—:]|\s)\s*(.+)$/i;
 
       function processText(text, highlight = null, blockId = null, originalMarkdown = null) {
         if (!text || typeof text !== 'string') return;
@@ -1492,8 +1609,13 @@
         const taskWithTimeMatch = trimmed.match(taskWithTimePattern);
         if (taskWithTimeMatch) {
           const isChecked = taskWithTimeMatch[1].toLowerCase() === 'x';
-          const startHour = parseTime(taskWithTimeMatch[2], taskWithTimeMatch[3], taskWithTimeMatch[4]);
-          const endHour = parseTime(taskWithTimeMatch[5], taskWithTimeMatch[6], taskWithTimeMatch[7]);
+          // Shared AM/PM: if start has no period but end does, use end's period for both
+          let startPeriod = taskWithTimeMatch[4];
+          const endPeriod = taskWithTimeMatch[7];
+          if (!startPeriod && endPeriod) startPeriod = endPeriod;
+
+          const startHour = parseTime(taskWithTimeMatch[2], taskWithTimeMatch[3], startPeriod);
+          const endHour = parseTime(taskWithTimeMatch[5], taskWithTimeMatch[6], endPeriod);
           const title = taskWithTimeMatch[8].trim();
 
           if (startHour !== null && endHour !== null && title) {
@@ -1515,8 +1637,13 @@
         // Check for regular time pattern (no checkbox)
         const match = trimmed.match(timePattern);
         if (match) {
-          const startHour = parseTime(match[1], match[2], match[3]);
-          const endHour = parseTime(match[4], match[5], match[6]);
+          // Shared AM/PM: if start has no period but end does, use end's period for both
+          let startPeriod = match[3];
+          const endPeriod = match[6];
+          if (!startPeriod && endPeriod) startPeriod = endPeriod;
+
+          const startHour = parseTime(match[1], match[2], startPeriod);
+          const endHour = parseTime(match[4], match[5], endPeriod);
           const title = match[7].trim();
 
           if (startHour !== null && endHour !== null && title) {
@@ -3024,7 +3151,7 @@
       }
     }
 
-    // Global spacebar handler
+    // Global keyboard shortcuts
     document.addEventListener('keydown', (e) => {
       const isTyping = ['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement.tagName);
       const modalOpen = !settingsModal.classList.contains('hidden');
@@ -3033,6 +3160,16 @@
       if (e.key === ' ' && !isTyping && !modalOpen && appVisible) {
         e.preventDefault();
         createInlineUnscheduledTask();
+      }
+
+      // Arrow keys for date navigation
+      if (e.key === 'ArrowLeft' && !isTyping && !modalOpen && appVisible) {
+        e.preventDefault();
+        goToPrevDay();
+      }
+      if (e.key === 'ArrowRight' && !isTyping && !modalOpen && appVisible) {
+        e.preventDefault();
+        goToNextDay();
       }
     });
 

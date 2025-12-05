@@ -1,7 +1,5 @@
 // Craft TimeBlock - JavaScript
-// Main application logic
 
-document.addEventListener('DOMContentLoaded', () => {
     // Constants
     const STORAGE_KEY = 'craft-timeblock-api';
     const THEME_KEY = 'craft-timeblock-theme';

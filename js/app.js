@@ -5,6 +5,8 @@ import { Utils } from './modules/utils.js';
 import { Interactions } from './modules/interactions.js';
 import { Theme } from './modules/theme.js';
 
+let isFirstLoad = true; // Track if this is the initial boot-up
+
 // 1. ROBUST STARTUP LOGIC
 const startApp = () => {
     console.log("Initializing App...");
@@ -28,7 +30,7 @@ function init() {
     UI.init();
     
     // Pass the refresh function to interactions
-    Interactions.init(loadSchedule);
+    Interactions.init(() => loadSchedule(false)); // Manual refresh (false = potentially show loading screen)
     
     State.loadSettings();
     // Populate Zoom options
@@ -37,12 +39,13 @@ function init() {
     // Check if we have a saved URL, otherwise show setup
     if (State.apiUrl) {
         UI.showApp();
-        loadSchedule();
+        loadSchedule(false); // Initial load
     } else {
         UI.showSetup();
     }
 
     setupGlobalEventListeners();
+    setupAutoRefresh(); // Start the polling
 }
 
 function setupGlobalEventListeners() {
@@ -55,10 +58,10 @@ function setupGlobalEventListeners() {
     
     // Actions
     const refreshBtn = document.getElementById('refresh-btn');
-    if(refreshBtn) refreshBtn.addEventListener('click', loadSchedule);
+    if(refreshBtn) refreshBtn.addEventListener('click', () => loadSchedule(false));
     
     const retryBtn = document.getElementById('retry-btn');
-    if(retryBtn) retryBtn.addEventListener('click', loadSchedule);
+    if(retryBtn) retryBtn.addEventListener('click', () => loadSchedule(false));
     
     // Sidebar
     const sidebarBtn = document.getElementById('sidebar-toggle-btn');
@@ -102,7 +105,7 @@ function setupGlobalEventListeners() {
     if(settingsUrl) {
         settingsUrl.addEventListener('change', e => {
             State.saveApiUrl(Utils.normalizeApiUrl(e.target.value));
-            loadSchedule();
+            loadSchedule(false);
         });
     }
 
@@ -119,7 +122,7 @@ function setupGlobalEventListeners() {
             try {
                 State.saveApiUrl(url);
                 UI.showApp();
-                loadSchedule();
+                loadSchedule(false);
             } catch(err) {
                  console.error("Setup error:", err);
                  const setupError = document.getElementById('setup-error');
@@ -162,14 +165,44 @@ function setupGlobalEventListeners() {
     });
 }
 
+// Auto Refresh Logic
+function setupAutoRefresh() {
+    // Refresh every 2 minutes
+    setInterval(() => {
+        // SAFETY CHECK: Do not refresh if user is interacting
+        const isInteracting = document.querySelector('.dragging, .resizing, .editing');
+        const isSettingsOpen = !document.getElementById('settings-modal').classList.contains('hidden');
+
+        if (!isInteracting && !isSettingsOpen) {
+            console.log("Auto-syncing...");
+            loadSchedule(true); // true = Background Sync
+        } else {
+            console.log("Skipping auto-sync due to user interaction");
+        }
+    }, 120 * 1000); 
+}
+
 function changeDay(delta) {
     State.currentDate.setDate(State.currentDate.getDate() + delta);
     UI.updateDateTitle();
-    loadSchedule();
+    // Changing day IS a major navigation, so we behave like a first load (show spinner/scroll)
+    isFirstLoad = true; 
+    loadSchedule(false);
 }
 
-export async function loadSchedule() {
-    UI.showLoading();
+// MODIFIED: Intelligent Loading State
+export async function loadSchedule(isBackground = false) {
+    // 1. Determine UX Mode
+    // "Blocking Mode" (Spinner) only on very first load or day change
+    // "Status Mode" (Non-blocking) for manual refreshes and auto-sync
+    const showBlockingLoader = isFirstLoad && !isBackground;
+
+    if (showBlockingLoader) {
+        UI.showLoading();
+    } else {
+        UI.showSyncStatus('saving', 'Syncing...');
+    }
+
     try {
         const data = await API.fetchSchedule();
         const { scheduled, unscheduledItems } = Utils.parseBlocks(data);
@@ -181,16 +214,27 @@ export async function loadSchedule() {
         UI.renderUnscheduled(unscheduledItems);
         Interactions.setupBlockInteractions();
         
-        // Hide loading, show app content
-        const loading = document.getElementById('loading');
-        const container = document.getElementById('timeline-container');
-        if(loading) loading.classList.add('hidden');
-        if(container) container.classList.remove('hidden');
-        
-        // Ensure accurate initial scroll
-        UI.scrollToNow();
+        if (showBlockingLoader) {
+            // Transition from Loading Screen -> App
+            const loading = document.getElementById('loading');
+            const container = document.getElementById('timeline-container');
+            if(loading) loading.classList.add('hidden');
+            if(container) container.classList.remove('hidden');
+            
+            // Only scroll to "Now" on first launch/day change
+            UI.scrollToNow();
+            isFirstLoad = false;
+        } else {
+            // For manual/auto refresh, just show success.
+            // WE DO NOT call scrollToNow() here, ensuring the view does not jump.
+            UI.showSyncStatus('saved', 'Synced');
+        }
     } catch (err) {
         console.error("Load Schedule Error:", err);
-        UI.showError(err.message);
+        if (showBlockingLoader) {
+            UI.showError(err.message);
+        } else {
+            UI.showSyncStatus('error', 'Sync failed');
+        }
     }
 }

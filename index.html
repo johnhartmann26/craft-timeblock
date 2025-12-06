@@ -4,10 +4,13 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Timeblock</title>
-  <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/timeline.css">
 </head>
 <body>
-  <!-- Setup Screen -->
   <div id="setup-screen" class="setup-screen">
     <h1>Timeblock</h1>
     <p>Connect your Craft daily notes to see your schedule as a beautiful timeline.</p>
@@ -24,7 +27,6 @@
     </form>
   </div>
 
-  <!-- Main App -->
   <div id="app" class="app hidden">
     <header class="header">
       <div class="date-nav">
@@ -42,8 +44,6 @@
       </div>
       
       <div class="header-actions">
-        
-        
         <div id="sync-status" class="sync-status">
           <span class="sync-indicator"></span>
           <span class="sync-text"></span>
@@ -75,7 +75,6 @@
           </svg>
           <span id="sidebar-badge" class="badge hidden">0</span>
         </button>
-      
       </div>
     </header>
 
@@ -88,9 +87,8 @@
       <button id="retry-btn">Try Again</button>
     </div>
 
-   <div id="timeline-container" class="hidden">
+    <div id="timeline-container" class="hidden">
       <div class="app-layout">
-        
         <div class="timeline-column">
           <div class="timeline">
             <div class="time-axis" id="time-axis"></div>
@@ -121,12 +119,8 @@
         </div>
       </div>
     </div>
-    </div>
-  </div>
-    </div>
   </div>
 
-  <!-- Settings Modal -->
   <div id="settings-modal" class="modal-overlay hidden">
     <div class="modal">
       <h2>Settings</h2>
@@ -172,20 +166,8 @@
           <span class="shortcut-key">Space</span>
         </div>
         <div class="shortcut-item">
-          <span class="shortcut-action">Create timeblock</span>
-          <span class="shortcut-key">Click empty timeline</span>
-        </div>
-        <div class="shortcut-item">
-          <span class="shortcut-action">Edit time</span>
-          <span class="shortcut-key">Drag edges</span>
-        </div>
-        <div class="shortcut-item">
-          <span class="shortcut-action">Move timeblock</span>
-          <span class="shortcut-key">Drag block</span>
-        </div>
-        <div class="shortcut-item">
           <span class="shortcut-action">Delete</span>
-          <span class="shortcut-key">Backspace / Swipe left</span>
+          <span class="shortcut-key">Backspace</span>
         </div>
         <div class="shortcut-item">
           <span class="shortcut-action">Navigate days</span>
@@ -193,12 +175,11 @@
         </div>
       </div>
       <div class="modal-footer">
-        <div class="author-line"><a href="https://github.com/eternalpriyan/craft-timeblock" target="_blank" rel="noopener">Craft Timeblock</a> by Nithya Priyan</div>
-        <a href="https://buymeacoffee.com/npsoy" target="_blank" rel="noopener">Buy me a coffee</a>
+        <div class="author-line"><a href="https://github.com/eternalpriyan/craft-timeblock" target="_blank" rel="noopener">Craft Timeblock</a></div>
       </div>
     </div>
   </div>
-  <script src="js/theme.js"> </script>
-  <script src="js/main.js"></script>
+  
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

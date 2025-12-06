@@ -1,0 +1,183 @@
+/* =========================================================
+   MAIN APP & HEADER LAYOUT
+   ========================================================= */
+.app {
+  max-width: 700px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.header {
+  position: sticky;
+  top: 1rem;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 0 1rem 2rem 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 16px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-strength));
+  -webkit-backdrop-filter: blur(var(--blur-strength));
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+}
+
+@media (max-width: 600px) {
+  .header {
+    top: 0;
+    margin: 0;
+    border-radius: 0 0 16px 16px;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+  }
+}
+
+.header h1 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.date-nav {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.25rem;
+}
+
+#sidebar-toggle-btn {
+  display: none; /* Hidden on mobile */
+}
+
+/* =========================================================
+   RESPONSIVE LAYOUT (Grid & Sidebar)
+   ========================================================= */
+
+/* Default (Mobile/Vertical) */
+.app-layout {
+  display: flex;
+  flex-direction: column;
+}
+
+.tasks-sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 50px;
+}
+
+/* Desktop (Wide Screens) */
+@media (min-width: 900px) {
+  /* Show sidebar toggle */
+  #sidebar-toggle-btn {
+    display: flex;
+  }
+
+  /* Expand Container */
+  .app {
+    max-width: 1400px;
+    padding: 0 2rem;
+  }
+
+  /* Grid Layout */
+  .app-layout {
+    display: grid;
+    grid-template-columns: 1fr 360px;
+    gap: 3rem;
+    align-items: start;
+    transition: all 0.3s cubic-bezier(0.2, 0, 0, 1);
+  }
+
+  /* Sidebar Closed State */
+  .app-layout.sidebar-closed {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+  .app-layout.sidebar-closed .tasks-sidebar {
+    display: none;
+  }
+
+  /* Sticky Sidebar */
+  .tasks-sidebar {
+    position: sticky;
+    top: calc(1rem + 80px);
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    padding: 0 1rem; /* Padding added to prevent touching edges */
+  }
+  .tasks-sidebar::-webkit-scrollbar { display: none; }
+  
+  /* Reset Mobile Margins for Sidebar Sections */
+  /* Note: .unscheduled styles are in timeline.css, but layout adjustments are here */
+  .unscheduled {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+    margin-bottom: 2rem;
+  }
+
+  /* Sticky Section Headers (Unscheduled / Done) */
+  .unscheduled h2 {
+    position: sticky;
+    top: 0;
+    background: var(--glass-bg); /* Use glass background */
+    z-index: 10;
+    padding: 0.5rem 0.75rem; /* Padding added for text breathing room */
+    margin-bottom: 0.5rem;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--glass-border);
+    border-radius: 8px;
+  }
+}
+
+/* =========================================
+   COLLAPSIBLE SECTIONS
+   ========================================= */
+
+/* Make headers clickable and align icon */
+.collapsible-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+  padding: 0.5rem 0.75rem; 
+}
+
+.collapsible-header:hover {
+  background: var(--surface-hover);
+}
+
+/* Icon Animation */
+.chevron-icon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+
+/* Collapsed State: Rotate Icon */
+.unscheduled.collapsed .chevron-icon {
+  transform: rotate(-90deg);
+}
+
+/* Collapsed State: Hide List */
+.unscheduled.collapsed #unscheduled-list,
+.unscheduled.collapsed #done-list {
+  display: none;
+}
+
+.header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

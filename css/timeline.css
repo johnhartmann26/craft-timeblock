@@ -1,0 +1,244 @@
+/* =========================================================
+   TIMELINE CONTAINER
+   ========================================================= */
+#timeline-container {
+  padding: 0 1.5rem 2rem 1.5rem;
+}
+
+.timeline {
+  position: relative;
+  margin-left: 56px;
+}
+
+.time-axis {
+  position: absolute;
+  left: -56px;
+  top: 0;
+  bottom: 0;
+  width: 48px;
+}
+
+.time-label {
+  position: absolute;
+  right: 12px;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--text-subtle);
+  transform: translateY(-50%);
+}
+
+.timeline-track {
+  position: relative;
+  border-left: 1px solid var(--border);
+  min-height: 960px;
+}
+
+.hour-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Now Line */
+.now-line {
+  position: absolute;
+  left: -6px;
+  right: 0;
+  height: 2px;
+  background: var(--now-line);
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  box-shadow: 0 0 10px rgba(217, 119, 87, 0.4);
+}
+
+.now-dot {
+  width: 10px;
+  height: 10px;
+  background: var(--now-line);
+  border-radius: 50%;
+  margin-left: -5px;
+  box-shadow: 0 0 0 3px rgba(217, 119, 87, 0.2);
+}
+
+.now-time {
+  position: absolute;
+  left: -60px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--now-line);
+  transform: translateY(-50%);
+  top: 50%;
+  background: var(--bg-color);
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+/* =========================================================
+   TIMEBLOCKS
+   ========================================================= */
+.timeblock {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  padding: 0.5rem 0.75rem;
+  border-radius: 8px;
+  overflow: hidden;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: 1px solid var(--card-border);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+  transition: transform 0.2s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.2s;
+  cursor: grab;
+  touch-action: none;
+}
+
+.timeblock:hover {
+  transform: scale(1.01);
+  z-index: 20;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.timeblock-time {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-bottom: 2px;
+  font-weight: 500;
+}
+
+.timeblock-title {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text);
+  line-height: 1.2;
+}
+
+.timeblock.work { background: var(--card-work); border-color: rgba(86, 156, 214, 0.3); }
+.timeblock.meeting { background: var(--card-meeting); border-color: rgba(217, 119, 87, 0.3); }
+.timeblock.personal { background: var(--card-personal); border-color: rgba(180, 142, 214, 0.3); }
+.timeblock.health { background: var(--card-health); border-color: rgba(134, 192, 108, 0.3); }
+.timeblock.default { background: var(--card-default); }
+.timeblock.current {
+  background: var(--card-current);
+  border-color: var(--now-line);
+  box-shadow: 0 0 0 1px rgba(217, 119, 87, 0.2), 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.timeblock.dragging { opacity: 0.4; cursor: grabbing; }
+
+/* Resize Handles */
+.resize-handle {
+  position: absolute; left: 0; right: 0; height: 10px; cursor: ns-resize; z-index: 5;
+}
+.resize-handle:hover { background: rgba(255,255,255,0.2); }
+.resize-handle-top { top: 0; }
+.resize-handle-bottom { bottom: 0; }
+
+/* Inline Edit */
+.timeblock.editing { z-index: 50; cursor: default; background: var(--glass-bg); box-shadow: 0 8px 24px rgba(0,0,0,0.2); }
+.timeblock-title-input {
+  background: transparent; border: none; outline: none;
+  font-weight: 600; font-size: 16px; color: var(--text); width: 100%;
+}
+.timeblock-title-input::placeholder { color: var(--text-subtle); }
+
+/* Task Checkboxes inside Timeblocks */
+.timeblock-content { display: flex; align-items: flex-start; gap: 0.5rem; }
+.timeblock-checkbox {
+  appearance: none; width: 18px; height: 18px;
+  border: 2px solid var(--text-muted); border-radius: 5px;
+  cursor: pointer; flex-shrink: 0; margin-top: 1px;
+  background: rgba(255,255,255,0.05);
+  transition: all 0.2s;
+}
+.timeblock-checkbox:checked {
+  background: var(--accent); border-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+  background-size: 12px; background-position: center; background-repeat: no-repeat;
+}
+.timeblock.checked .timeblock-title { text-decoration: line-through; color: var(--text-muted); opacity: 0.8; }
+
+/* =========================================================
+   UNSCHEDULED & DONE LISTS
+   ========================================================= */
+.unscheduled {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--border);
+}
+
+.unscheduled h2 {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-subtle);
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.unscheduled-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 0.5rem;
+  background: var(--surface-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: 12px;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  font-size: 0.9rem;
+  color: var(--text);
+  transition: all 0.2s;
+  cursor: grab;
+}
+
+.unscheduled-item:hover {
+  background: var(--surface-hover);
+  transform: translateX(2px);
+  border-color: var(--text-muted);
+}
+
+.unscheduled-checkbox {
+  appearance: none; width: 18px; height: 18px;
+  border: 2px solid var(--text-muted); border-radius: 5px;
+  cursor: pointer; flex-shrink: 0;
+  transition: all 0.2s;
+}
+.unscheduled-checkbox:checked {
+  background: var(--accent); border-color: var(--accent);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='20 6 9 17 4 12'%3E%3C/polyline%3E%3C/svg%3E");
+  background-size: 12px; background-position: center; background-repeat: no-repeat;
+}
+
+.unscheduled-text { flex: 1; }
+.unscheduled-item.checked .unscheduled-text { text-decoration: line-through; color: var(--text-muted); }
+.unscheduled-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  font-size: 16px; color: var(--text); font-family: inherit;
+}
+
+/* Drop Zones */
+.drop-indicator {
+  position: absolute; left: 8px; right: 8px;
+  background: rgba(217, 119, 87, 0.1);
+  border: 2px dashed var(--accent);
+  border-radius: 8px;
+  pointer-events: none;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--accent); font-size: 0.8rem; font-weight: 600;
+  backdrop-filter: blur(2px);
+}
+
+/* Desktop layout drag over style */
+@media (min-width: 900px) {
+  .unscheduled.drag-over {
+    margin: -0.5rem;
+    padding: 1rem;
+    border: 2px dashed var(--accent);
+    background: rgba(217, 119, 87, 0.05);
+    border-radius: 12px;
+  }
+}

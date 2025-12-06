@@ -24,8 +24,7 @@ export const Interactions = {
         this.setupKeydownListeners();
         this.setupDropZones();
         
-        // Listen for timeline clicks to create blocks
-        UI.elements['timeline-track'].addEventListener('click', (e) => this.handleTimelineClick(e));
+        // Removed: Timeline click listener (so clicking empty space does nothing)
         
         // Listen for sidebar Add button
         const addBtn = document.getElementById('add-task-btn');
@@ -484,68 +483,6 @@ export const Interactions = {
             this.setupBlockInteractions();
             UI.showSyncStatus('error', 'Failed');
         }
-    },
-
-    // --- Creation / Deletion ---
-
-    handleTimelineClick(e) {
-        if (e.target.closest('.timeblock') || e.target.closest('.now-line')) return;
-        
-        const rect = UI.elements['timeline-track'].getBoundingClientRect();
-        const y = e.clientY - rect.top;
-        let start = y / State.HOUR_HEIGHT + State.startHour;
-        start = Math.round(start * 4) / 4;
-        start = Math.max(State.startHour, Math.min(State.endHour - 1, start));
-
-        this.createInlineTimeblock(start);
-    },
-
-    createInlineTimeblock(start) {
-        if (this.editingBlock) this.editingBlock.remove();
-        
-        const end = start + 1;
-        const el = document.createElement('div');
-        el.className = 'timeblock default editing';
-        el.style.top = `${start * State.HOUR_HEIGHT}px`;
-        el.style.height = `${State.HOUR_HEIGHT}px`;
-        
-        el.innerHTML = `
-            <div class="timeblock-time">${Utils.formatTimeRange(start, end)}</div>
-            <input class="timeblock-title-input" placeholder="What's happening?" autofocus>
-        `;
-        
-        UI.elements['timeline-track'].appendChild(el);
-        this.editingBlock = el;
-        
-        const input = el.querySelector('input');
-        input.focus();
-
-        const save = async () => {
-            const title = input.value.trim();
-            if (title) {
-                const startStr = Utils.decimalToTimeString(start);
-                const endStr = Utils.decimalToTimeString(end);
-                const markdown = `\`${startStr} - ${endStr}\` - ${title}`;
-                
-                UI.showSyncStatus('saving', 'Creating...');
-                try {
-                    await API.createBlock(markdown);
-                    this.editingBlock = null;
-                    el.remove();
-                    this.triggerRefresh();
-                    UI.showSyncStatus('saved', 'Created');
-                } catch(e) { console.error(e); UI.showSyncStatus('error', 'Failed'); }
-            } else {
-                el.remove();
-                this.editingBlock = null;
-            }
-        };
-
-        input.addEventListener('keydown', e => {
-            if (e.key === 'Enter') { e.preventDefault(); input.blur(); } 
-            if (e.key === 'Escape') { el.remove(); this.editingBlock = null; }
-        });
-        input.addEventListener('blur', save);
     },
 
     createInlineUnscheduledTask() {

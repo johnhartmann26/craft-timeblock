@@ -177,12 +177,21 @@ export const Interactions = {
 
         // Unscheduled Section Drop Zone
         const unscheduledSection = UI.elements['unscheduled'];
+        
         unscheduledSection.addEventListener('dragover', e => {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
             unscheduledSection.classList.add('drag-over');
         });
-        unscheduledSection.addEventListener('dragleave', () => unscheduledSection.classList.remove('drag-over'));
+
+        // FIX: Only remove 'drag-over' if we actually leave the container,
+        // preventing flicker when hovering over child elements.
+        unscheduledSection.addEventListener('dragleave', (e) => {
+            if (!unscheduledSection.contains(e.relatedTarget)) {
+                unscheduledSection.classList.remove('drag-over');
+            }
+        });
+
         unscheduledSection.addEventListener('drop', async (e) => {
             e.preventDefault();
             unscheduledSection.classList.remove('drag-over');

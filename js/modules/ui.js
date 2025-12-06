@@ -13,33 +13,44 @@ export const UI = {
             'unscheduled', 'unscheduled-list', 'done', 'done-list',
             'settings-modal', 'sidebar-toggle-btn', 'sidebar-badge',
             'unscheduled-section-badge', 'done-section-badge', 'sync-status',
-            'settings-api-url', 'settings-start-hour', 'settings-end-hour'
+            'settings-api-url', 'settings-zoom-level'
         ];
         ids.forEach(id => this.elements[id] = document.getElementById(id));
+        
+        // Initial Calculation
+        this.recalcViewport();
     },
 
-    populateTimeSelects() {
-        const startSel = this.elements['settings-start-hour'];
-        const endSel = this.elements['settings-end-hour'];
-        if (!startSel) return;
-
-        // Clear existing to avoid duplicates if re-initialized
-        startSel.innerHTML = '';
-        endSel.innerHTML = '';
-
-        for (let h = 0; h <= 23; h++) {
-            const label = Utils.formatHourLabel(h);
-            const s = document.createElement('option'); s.value = h; s.textContent = label;
-            const e = document.createElement('option'); e.value = h; e.textContent = label;
-            startSel.appendChild(s);
-            endSel.appendChild(e);
-        }
-        startSel.value = State.startHour;
-        endSel.value = State.endHour;
+    // Calculate the pixel height of one hour based on window size and zoom level
+    recalcViewport() {
+        const viewportHeight = window.innerHeight;
+        State.HOUR_HEIGHT = viewportHeight / State.hoursVisible;
+        this.updateTimelineHeight();
     },
-    
-    // ... [Rest of UI.js remains exactly the same as previous response] ...
-    
+
+    populateZoomSelect() {
+        const select = this.elements['settings-zoom-level'];
+        if (!select) return;
+
+        select.innerHTML = '';
+        const options = [
+            { label: '4 Hours (Close Up)', value: 4 },
+            { label: '6 Hours', value: 6 },
+            { label: '8 Hours (Workday)', value: 8 },
+            { label: '12 Hours (Half Day)', value: 12 },
+            { label: '16 Hours', value: 16 },
+            { label: '24 Hours (Full Day)', value: 24 }
+        ];
+
+        options.forEach(opt => {
+            const el = document.createElement('option');
+            el.value = opt.value;
+            el.textContent = opt.label;
+            if (opt.value === State.hoursVisible) el.selected = true;
+            select.appendChild(el);
+        });
+    },
+
     showSetup() {
         this.elements['setup-screen'].classList.remove('hidden');
         this.elements['app'].classList.add('hidden');
@@ -49,9 +60,12 @@ export const UI = {
         this.elements['setup-screen'].classList.add('hidden');
         this.elements['app'].classList.remove('hidden');
         this.updateDateTitle();
-        this.updateTimelineHeight();
+        
+        this.recalcViewport();
         this.renderTimeAxis();
         this.applySidebarState();
+        
+        setTimeout(() => this.scrollToNow(), 10);
     },
 
     showLoading() {
@@ -72,16 +86,20 @@ export const UI = {
     },
 
     updateTimelineHeight() {
-        this.elements['timeline-track'].style.minHeight = `${State.totalHours * State.HOUR_HEIGHT}px`;
+        if(this.elements['timeline-track']) {
+            this.elements['timeline-track'].style.height = `${24 * State.HOUR_HEIGHT}px`;
+        }
     },
 
     renderTimeAxis() {
         const axis = this.elements['time-axis'];
+        if (!axis) return;
+        
         axis.innerHTML = '';
-        for (let hour = State.startHour; hour <= State.endHour; hour++) {
+        for (let hour = 0; hour <= 24; hour++) {
             const label = document.createElement('div');
             label.className = 'time-label';
-            label.style.top = `${(hour - State.startHour) * State.HOUR_HEIGHT}px`;
+            label.style.top = `${hour * State.HOUR_HEIGHT}px`;
             label.textContent = Utils.formatHourLabel(hour);
             axis.appendChild(label);
         }
@@ -89,12 +107,13 @@ export const UI = {
 
     renderTimeline(blocks) {
         const track = this.elements['timeline-track'];
-        track.querySelectorAll('.timeblock, .hour-line, .now-line').forEach(el => el.remove());
+        track.querySelectorAll('.hour-line, .now-line, .timeblock').forEach(el => el.remove());
 
-        for (let hour = State.startHour; hour <= State.endHour; hour++) {
+        // Render Grid Lines
+        for (let hour = 0; hour <= 24; hour++) {
             const line = document.createElement('div');
             line.className = 'hour-line';
-            line.style.top = `${(hour - State.startHour) * State.HOUR_HEIGHT}px`;
+            line.style.top = `${hour * State.HOUR_HEIGHT}px`;
             track.appendChild(line);
         }
 
@@ -105,6 +124,9 @@ export const UI = {
             el.className = `timeblock ${block.category}`;
             el.dataset.blockIndex = index;
             if (block.id) el.dataset.blockId = block.id;
+
+            // Robust Draggable Attribute
+            el.setAttribute('draggable', 'true');
 
             if (block.highlight) {
                 if (block.highlight.startsWith('#')) {
@@ -119,18 +141,19 @@ export const UI = {
             if (now >= block.start && now < block.end) el.classList.add('current');
             if (block.checked) el.classList.add('checked');
 
-            const top = (block.start - State.startHour) * State.HOUR_HEIGHT;
+            const top = block.start * State.HOUR_HEIGHT;
             const height = (block.end - block.start) * State.HOUR_HEIGHT;
-            const clampedTop = Math.max(0, top);
-            const clampedHeight = Math.min(height, State.totalHours * State.HOUR_HEIGHT - clampedTop);
+            
+            el.style.top = `${top}px`;
+            el.style.height = `${height}px`;
 
-            if (clampedHeight <= 0) return;
+            // DYNAMIC HANDLE HEIGHT
+            const handleHeight = Math.min(10, Math.floor(height / 4));
+            const handleStyle = `height: ${handleHeight}px;`;
 
-            el.style.top = `${clampedTop}px`;
-            el.style.height = `${clampedHeight}px`;
-
+            // FIX: Added draggable="false" to handles so browser doesn't try to drag the parent
             const innerContent = `
-                <div class="resize-handle resize-handle-top"></div>
+                <div class="resize-handle resize-handle-top" draggable="false" style="${handleStyle}"></div>
                 <div class="timeblock-time">${Utils.formatTimeRange(block.start, block.end)}</div>
                 ${block.isTask 
                   ? `<div class="timeblock-content">
@@ -139,7 +162,7 @@ export const UI = {
                      </div>`
                   : `<div class="timeblock-title">${Utils.escapeHtml(block.title)}</div>`
                 }
-                <div class="resize-handle resize-handle-bottom"></div>
+                <div class="resize-handle resize-handle-bottom" draggable="false" style="${handleStyle}"></div>
             `;
             el.innerHTML = innerContent;
             track.appendChild(el);
@@ -163,7 +186,7 @@ export const UI = {
             el.className = 'unscheduled-item' + (item.checked ? ' checked' : '');
             el.dataset.index = index;
             if (item.id) el.dataset.blockId = item.id;
-            el.draggable = true;
+            el.setAttribute('draggable', 'true');
 
             const checkbox = document.createElement('input');
             checkbox.type = 'checkbox';
@@ -259,11 +282,6 @@ export const UI = {
         let nowLine = track.querySelector('.now-line');
         const now = this.getCurrentTimeDecimal();
 
-        if (now < State.startHour || now > State.endHour) {
-            if (nowLine) nowLine.remove();
-            return;
-        }
-
         if (!nowLine) {
             nowLine = document.createElement('div');
             nowLine.className = 'now-line';
@@ -271,7 +289,7 @@ export const UI = {
             track.appendChild(nowLine);
         }
 
-        const top = (now - State.startHour) * State.HOUR_HEIGHT;
+        const top = now * State.HOUR_HEIGHT;
         nowLine.style.top = `${top}px`;
         nowLine.querySelector('.now-time').textContent = Utils.formatDecimalTime(now);
     },
@@ -283,13 +301,19 @@ export const UI = {
 
     scrollToNow() {
         const now = this.getCurrentTimeDecimal();
-        if (now >= State.startHour && now <= State.endHour) {
-            const top = (now - State.startHour) * State.HOUR_HEIGHT;
-            const offset = window.innerHeight / 3;
-            window.scrollTo({
-                top: Math.max(0, top - offset),
-                behavior: 'smooth'
-            });
-        }
+        const nowPosition = now * State.HOUR_HEIGHT;
+        const viewportHeight = window.innerHeight;
+        const upperThirdOffset = viewportHeight / 3;
+        let targetScroll = nowPosition - upperThirdOffset;
+
+        const maxScroll = (24 * State.HOUR_HEIGHT) - viewportHeight;
+        
+        if (targetScroll < 0) targetScroll = 0;
+        if (targetScroll > maxScroll) targetScroll = maxScroll;
+
+        window.scrollTo({
+            top: targetScroll,
+            behavior: 'smooth'
+        });
     }
 };

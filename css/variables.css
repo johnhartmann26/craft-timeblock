@@ -1,8 +1,9 @@
 /* =========================================================
    GLOBAL VARIABLES & THEMES
    ========================================================= */
+
+/* 1. DEFAULT FALLBACK (System Default / Dark) */
 :root {
-  /* --- Dark Theme (Default) --- */
   --bg-color: #121212;
   --bg-gradient: 
     radial-gradient(circle at 15% 50%, rgba(86, 156, 214, 0.08), transparent 40%),
@@ -39,8 +40,8 @@
   --card-border: rgba(255, 255, 255, 0.15);
 }
 
-[data-theme="light"] {
-  /* --- Light Theme --- */
+/* 2. EXPLICIT LIGHT THEME */
+html[data-theme="light"] {
   --bg-color: #f2f2f7;
   --bg-gradient: 
     radial-gradient(circle at 15% 50%, rgba(86, 156, 214, 0.15), transparent 40%),
@@ -54,6 +55,7 @@
   --accent: #d97757;
   --accent-hover: #b85535;
   --now-line: #c96442;
+  --error: #ff6b6b;
 
   /* Glass Panes (Light) - Dark borders for visibility */
   --glass-bg: rgba(255, 255, 255, 0.65);
@@ -73,4 +75,40 @@
   --card-default: rgba(0, 0, 0, 0.03);
   --card-current: rgba(217, 119, 87, 0.25);
   --card-border: rgba(0, 0, 0, 0.08);
+}
+
+/* 3. EXPLICIT DARK THEME */
+html[data-theme="dark"] {
+  --bg-color: #121212;
+  --bg-gradient: 
+    radial-gradient(circle at 15% 50%, rgba(86, 156, 214, 0.08), transparent 40%),
+    radial-gradient(circle at 85% 30%, rgba(217, 119, 87, 0.08), transparent 40%);
+  
+  --text: #ffffff;
+  --text-muted: rgba(255, 255, 255, 0.65);
+  --text-subtle: rgba(255, 255, 255, 0.45);
+  
+  --border: rgba(255, 255, 255, 0.1);
+  --accent: #d97757;
+  --accent-hover: #e88968;
+  --now-line: #d97757;
+
+  /* Glass Panes (Dark) */
+  --glass-bg: rgba(30, 30, 30, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+
+  /* Input/Item Backgrounds (Dark) */
+  --surface-bg: rgba(255, 255, 255, 0.05);
+  --surface-hover: rgba(255, 255, 255, 0.1);
+  --surface-border: rgba(255, 255, 255, 0.1);
+
+  /* Timeblock Colors (Dark Glass) */
+  --card-work: rgba(86, 156, 214, 0.2);
+  --card-meeting: rgba(217, 119, 87, 0.2);
+  --card-personal: rgba(180, 142, 214, 0.2);
+  --card-health: rgba(134, 192, 108, 0.2);
+  --card-default: rgba(255, 255, 255, 0.05);
+  --card-current: rgba(217, 119, 87, 0.3);
+  --card-border: rgba(255, 255, 255, 0.15);
 }

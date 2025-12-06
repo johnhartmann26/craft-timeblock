@@ -45,7 +45,7 @@ export const Interactions = {
             const block = State.scheduledBlocks[index];
             if (!block) return;
 
-            el.draggable = true;
+            el.draggable = true; 
             this.setupMouseHover(el, 'block');
             this.setupDragStart(el, {
                 type: 'scheduled',
@@ -102,7 +102,12 @@ export const Interactions = {
 
     setupDragStart(el, data) {
         el.addEventListener('dragstart', (e) => {
-            if (el.classList.contains('editing')) return;
+            // FIX: If we are resizing, or editing text, do NOT start a drag.
+            if (el.classList.contains('resizing') || el.classList.contains('editing')) {
+                e.preventDefault();
+                return;
+            }
+            
             el.classList.add('dragging');
             e.dataTransfer.setData('text/plain', JSON.stringify(data));
             e.dataTransfer.effectAllowed = 'move';
@@ -198,7 +203,7 @@ export const Interactions = {
             track.appendChild(this.dropIndicator);
         }
 
-        const top = (start - State.startHour) * State.HOUR_HEIGHT;
+        const top = start * State.HOUR_HEIGHT; // Optimized 0-24 math
         const height = (end - start) * State.HOUR_HEIGHT;
 
         this.dropIndicator.style.top = `${top}px`;
@@ -234,6 +239,9 @@ export const Interactions = {
         const startY = isTouch ? e.touches[0].clientY : e.clientY;
         const startTop = parseFloat(el.style.top);
         const startHeight = parseFloat(el.style.height);
+        
+        // Dynamic Snap Interval based on current zoom
+        const snapPixels = State.HOUR_HEIGHT / 4;
 
         const onMove = (moveEvent) => {
             if (isTouch) moveEvent.preventDefault();
@@ -245,22 +253,28 @@ export const Interactions = {
             if (edge === 'top') {
                 newTop = startTop + deltaY;
                 newHeight = startHeight - deltaY;
-                // Snap
-                newTop = Math.round(newTop / 15) * 15;
+                
+                newTop = Math.round(newTop / snapPixels) * snapPixels;
                 newHeight = startHeight + startTop - newTop;
                 
-                if (newHeight < 15) { newHeight = 15; newTop = startTop + startHeight - 15; }
-                if (newTop < 0) { newTop = 0; newHeight = startHeight + startTop; }
+                if (newHeight < snapPixels) { 
+                    newHeight = snapPixels; 
+                    newTop = startTop + startHeight - snapPixels; 
+                }
+                if (newTop < 0) { 
+                    newTop = 0; 
+                    newHeight = startHeight + startTop; 
+                }
             } else {
                 newHeight = startHeight + deltaY;
-                newHeight = Math.round(newHeight / 15) * 15;
-                if (newHeight < 15) newHeight = 15;
+                newHeight = Math.round(newHeight / snapPixels) * snapPixels;
+                
+                if (newHeight < snapPixels) newHeight = snapPixels;
             }
 
             el.style.top = `${newTop}px`;
             el.style.height = `${newHeight}px`;
             
-            // Visual Update
             const s = newTop / State.HOUR_HEIGHT + State.startHour;
             const eTime = s + newHeight / State.HOUR_HEIGHT;
             el.querySelector('.timeblock-time').textContent = Utils.formatTimeRange(s, eTime);
@@ -292,27 +306,39 @@ export const Interactions = {
         }
     },
 
-    // --- API Actions for Interactions ---
+    // --- OPTIMISTIC API ACTIONS ---
 
     async repositionTimeblock(data, newStart, newEnd) {
+        // 1. Snapshot for Revert
+        const block = State.scheduledBlocks[data.index];
+        const prevStart = block.start;
+        const prevEnd = block.end;
+
+        // 2. Optimistic Update (Immediate)
+        block.start = newStart;
+        block.end = newEnd;
+        UI.renderTimeline(State.scheduledBlocks);
+        this.setupBlockInteractions(); // Re-bind events immediately
         UI.showSyncStatus('saving', 'Moving...');
+
+        // 3. API Call (Background)
         try {
             const startStr = Utils.decimalToTimeString(newStart);
             const endStr = Utils.decimalToTimeString(newEnd);
             const newMarkdown = `\`${startStr} - ${endStr}\` - ${data.title}`;
             
             await API.updateBlock(data.blockId, newMarkdown);
-            // Optimistic update
-            const block = State.scheduledBlocks[data.index];
-            if (block) { block.start = newStart; block.end = newEnd; block.originalMarkdown = newMarkdown; }
-            
-            UI.renderTimeline(State.scheduledBlocks);
-            this.setupBlockInteractions();
+            // Update local model to match server truth
+            block.originalMarkdown = newMarkdown;
             UI.showSyncStatus('saved', 'Moved');
         } catch (e) {
-            console.error(e);
+            console.error('API Error:', e);
+            // 4. Revert on Fail
+            block.start = prevStart;
+            block.end = prevEnd;
+            UI.renderTimeline(State.scheduledBlocks);
+            this.setupBlockInteractions();
             UI.showSyncStatus('error', 'Move failed');
-            this.triggerRefresh(); // Revert
         }
     },
 
@@ -323,7 +349,33 @@ export const Interactions = {
     },
 
     async convertUnscheduledToTimeblock(data, start, end) {
+        // 1. Snapshot
+        const itemIndex = State.unscheduledBlocks.findIndex(b => b.id === data.blockId);
+        const item = State.unscheduledBlocks[itemIndex];
+        if (!item) return;
+
+        // 2. Optimistic Update (Move from Unscheduled -> Scheduled)
+        State.unscheduledBlocks.splice(itemIndex, 1);
+        
+        const newBlock = {
+            id: item.id,
+            start: start,
+            end: end,
+            title: item.text,
+            category: Utils.categorizeTask(item.text),
+            isTask: true,
+            checked: item.checked
+        };
+        State.scheduledBlocks.push(newBlock);
+        // Sort to keep order logical
+        State.scheduledBlocks.sort((a, b) => a.start - b.start);
+
+        UI.renderTimeline(State.scheduledBlocks);
+        UI.renderUnscheduled(State.unscheduledBlocks);
+        this.setupBlockInteractions();
         UI.showSyncStatus('saving', 'Scheduling...');
+
+        // 3. API Call
         try {
             const startStr = Utils.decimalToTimeString(start);
             const endStr = Utils.decimalToTimeString(end);
@@ -331,29 +383,57 @@ export const Interactions = {
             const newMarkdown = `- [${checkMark}] \`${startStr} - ${endStr}\` ${data.text}`;
             
             await API.updateBlock(data.blockId, newMarkdown);
-            // Re-fetch strictly easier to ensure sync
-            this.triggerRefresh();
             UI.showSyncStatus('saved', 'Scheduled');
         } catch (e) {
             console.error(e);
+            this.triggerRefresh(); // Hard reset on error is safest here
             UI.showSyncStatus('error', 'Failed');
         }
     },
 
     async convertTimeblockToUnscheduled(data) {
+        // 1. Snapshot
+        const blockIndex = State.scheduledBlocks.findIndex(b => b.id === data.blockId);
+        const block = State.scheduledBlocks[blockIndex];
+        if (!block) return;
+
+        // 2. Optimistic Update (Scheduled -> Unscheduled)
+        State.scheduledBlocks.splice(blockIndex, 1);
+        
+        const newItem = {
+            id: block.id,
+            text: block.title,
+            checked: block.checked
+        };
+        State.unscheduledBlocks.push(newItem);
+
+        UI.renderTimeline(State.scheduledBlocks);
+        UI.renderUnscheduled(State.unscheduledBlocks);
+        this.setupBlockInteractions();
         UI.showSyncStatus('saving', 'Unscheduling...');
+
+        // 3. API Call
         try {
             const checkMark = data.checked ? 'x' : ' ';
             const newMarkdown = `- [${checkMark}] ${data.title}`;
             await API.updateBlock(data.blockId, newMarkdown);
-            this.triggerRefresh();
             UI.showSyncStatus('saved', 'Unscheduled');
-        } catch (e) { console.error(e); UI.showSyncStatus('error', 'Failed'); }
+        } catch (e) {
+            console.error(e);
+            this.triggerRefresh();
+            UI.showSyncStatus('error', 'Failed');
+        }
     },
 
     async toggleTaskTimeblock(index, checked) {
+        // 1. Optimistic Update
         const block = State.scheduledBlocks[index];
+        block.checked = checked;
+        UI.renderTimeline(State.scheduledBlocks);
+        this.setupBlockInteractions();
         UI.showSyncStatus('saving', 'Updating...');
+
+        // 2. API Call
         try {
             const startStr = Utils.decimalToTimeString(block.start);
             const endStr = Utils.decimalToTimeString(block.end);
@@ -361,25 +441,26 @@ export const Interactions = {
             const newMarkdown = `- [${checkMark}] \`${startStr} - ${endStr}\` ${block.title}`;
             
             await API.updateBlock(block.id, newMarkdown);
-            block.checked = checked;
-            UI.renderTimeline(State.scheduledBlocks); 
-            this.setupBlockInteractions();
             UI.showSyncStatus('saved', 'Updated');
         } catch (e) {
             console.error(e);
+            // Revert
+            block.checked = !checked;
+            UI.renderTimeline(State.scheduledBlocks);
+            this.setupBlockInteractions();
             UI.showSyncStatus('error', 'Failed');
-            this.triggerRefresh();
         }
     },
 
     async toggleUnscheduledItem(index, checked) {
+        // 1. Optimistic Update
         const item = State.unscheduledBlocks[index];
-        // Optimistic UI
         item.checked = checked;
         UI.renderUnscheduled(State.unscheduledBlocks);
-        this.setupBlockInteractions(); // Re-bind listeners
-        
+        this.setupBlockInteractions();
         UI.showSyncStatus('saving', 'Updating...');
+
+        // 2. API Call
         try {
             const checkMark = checked ? 'x' : ' ';
             const newMarkdown = `- [${checkMark}] ${item.text}`;
@@ -388,8 +469,10 @@ export const Interactions = {
             UI.showSyncStatus('saved', 'Updated');
         } catch (e) {
             console.error(e);
-            item.checked = !checked; // Revert
+            // Revert
+            item.checked = !checked; 
             UI.renderUnscheduled(State.unscheduledBlocks);
+            this.setupBlockInteractions();
             UI.showSyncStatus('error', 'Failed');
         }
     },
@@ -414,7 +497,7 @@ export const Interactions = {
         const end = start + 1;
         const el = document.createElement('div');
         el.className = 'timeblock default editing';
-        el.style.top = `${(start - State.startHour) * State.HOUR_HEIGHT}px`;
+        el.style.top = `${start * State.HOUR_HEIGHT}px`;
         el.style.height = `${State.HOUR_HEIGHT}px`;
         
         el.innerHTML = `

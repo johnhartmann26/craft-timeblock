@@ -1,14 +1,15 @@
 export const State = {
     // Constants
     STORAGE_KEY: 'craft-timeblock-api',
-    TIME_SETTINGS_KEY: 'craft-timeblock-times',
+    ZOOM_KEY: 'craft-timeblock-zoom',
     SIDEBAR_KEY: 'craft-timeblock-sidebar-collapsed',
-    HOUR_HEIGHT: 60, // pixels per hour
-
-    // Config (Defaults)
-    startHour: 6,
-    endHour: 22,
     
+    // Viewport Settings
+    hoursVisible: 8, // Default to a standard workday view
+    
+    // Dynamic Metrics (Calculated by UI based on window height)
+    HOUR_HEIGHT: 60, 
+
     // Runtime Data
     apiUrl: '',
     currentDate: new Date(),
@@ -20,32 +21,25 @@ export const State = {
     hoveredBlock: null,
     hoveredUnscheduledItem: null,
 
-    get totalHours() {
-        return this.endHour - this.startHour;
-    },
+    // The timeline now always covers the full 24h day
+    get startHour() { return 0; },
+    get endHour() { return 24; },
+    get totalHours() { return 24; },
 
     loadSettings() {
         this.apiUrl = localStorage.getItem(this.STORAGE_KEY) || '';
 
-        const timeSettings = localStorage.getItem(this.TIME_SETTINGS_KEY);
-        if (timeSettings) {
-            try {
-                const { start, end } = JSON.parse(timeSettings);
-                this.startHour = start;
-                this.endHour = end;
-            } catch (e) {
-                console.warn('Failed to parse time settings', e);
-                // Fallback to defaults
-            }
+        const savedZoom = localStorage.getItem(this.ZOOM_KEY);
+        if (savedZoom) {
+            this.hoursVisible = parseInt(savedZoom, 10);
         }
 
         this.isSidebarCollapsed = localStorage.getItem(this.SIDEBAR_KEY) === 'true';
     },
 
-    saveTimeSettings(start, end) {
-        this.startHour = start;
-        this.endHour = end;
-        localStorage.setItem(this.TIME_SETTINGS_KEY, JSON.stringify({ start, end }));
+    saveZoomSetting(hours) {
+        this.hoursVisible = hours;
+        localStorage.setItem(this.ZOOM_KEY, hours);
     },
 
     saveApiUrl(url) {

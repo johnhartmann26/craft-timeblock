@@ -31,7 +31,8 @@ function init() {
     Interactions.init(loadSchedule);
     
     State.loadSettings();
-    UI.populateTimeSelects();
+    // Populate Zoom options
+    UI.populateZoomSelect();
 
     // Check if we have a saved URL, otherwise show setup
     if (State.apiUrl) {
@@ -79,21 +80,24 @@ function setupGlobalEventListeners() {
         });
     }
     
-    // Settings Form Changes
-    const startHourSelect = document.getElementById('settings-start-hour');
-    if(startHourSelect) {
-        startHourSelect.addEventListener('change', e => {
-            State.saveTimeSettings(parseInt(e.target.value), State.endHour);
-            UI.updateTimelineHeight(); UI.renderTimeAxis(); UI.renderTimeline(State.scheduledBlocks);
+    // Zoom Settings Change
+    const zoomSelect = document.getElementById('settings-zoom-level');
+    if (zoomSelect) {
+        zoomSelect.addEventListener('change', e => {
+            const hours = parseInt(e.target.value, 10);
+            State.saveZoomSetting(hours);
+            
+            // Recalculate and Render
+            UI.recalcViewport(); 
+            UI.renderTimeAxis(); 
+            UI.renderTimeline(State.scheduledBlocks);
+            Interactions.setupBlockInteractions(); 
+            
+            // Snap to Upper Third
+            UI.scrollToNow();
         });
     }
-    const endHourSelect = document.getElementById('settings-end-hour');
-    if(endHourSelect) {
-        endHourSelect.addEventListener('change', e => {
-            State.saveTimeSettings(State.startHour, parseInt(e.target.value));
-            UI.updateTimelineHeight(); UI.renderTimeAxis(); UI.renderTimeline(State.scheduledBlocks);
-        });
-    }
+
     const settingsUrl = document.getElementById('settings-api-url');
     if(settingsUrl) {
         settingsUrl.addEventListener('change', e => {
@@ -106,8 +110,7 @@ function setupGlobalEventListeners() {
     const setupForm = document.getElementById('setup-form');
     if (setupForm) {
         setupForm.addEventListener('submit', async (e) => {
-            e.preventDefault(); // Stop page reload
-            console.log("Form submitted");
+            e.preventDefault(); 
             
             const input = document.getElementById('api-url');
             const url = Utils.normalizeApiUrl(input.value.trim());
@@ -127,6 +130,36 @@ function setupGlobalEventListeners() {
             }
         });
     }
+
+    // --- FIX FOR REFRESH LOOP ---
+    // Prevent layout thrashing by ignoring small vertical changes (mobile address bar)
+    let lastWidth = window.innerWidth;
+    let lastHeight = window.innerHeight;
+
+    window.addEventListener('resize', () => {
+        const newWidth = window.innerWidth;
+        const newHeight = window.innerHeight;
+        
+        // Only trigger update if width changes (orientation/desktop resize)
+        // OR if height changes significantly (>60px), ruling out address bar toggles
+        const widthChanged = newWidth !== lastWidth;
+        const heightChanged = Math.abs(newHeight - lastHeight) > 60;
+
+        if (!widthChanged && !heightChanged) return;
+
+        lastWidth = newWidth;
+        lastHeight = newHeight;
+
+        if (window.resizeTimer) clearTimeout(window.resizeTimer);
+        window.resizeTimer = setTimeout(() => {
+            if (State.scheduledBlocks.length > 0) {
+                UI.recalcViewport();
+                UI.renderTimeAxis();
+                UI.renderTimeline(State.scheduledBlocks);
+                Interactions.setupBlockInteractions();
+            }
+        }, 100);
+    });
 }
 
 function changeDay(delta) {
@@ -154,6 +187,7 @@ export async function loadSchedule() {
         if(loading) loading.classList.add('hidden');
         if(container) container.classList.remove('hidden');
         
+        // Ensure accurate initial scroll
         UI.scrollToNow();
     } catch (err) {
         console.error("Load Schedule Error:", err);

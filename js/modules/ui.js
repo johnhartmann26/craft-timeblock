@@ -151,16 +151,18 @@ export const UI = {
             const handleHeight = Math.min(10, Math.floor(height / 4));
             const handleStyle = `height: ${handleHeight}px;`;
 
-            // FIX: Added draggable="false" to handles so browser doesn't try to drag the parent
+            // Markdown rendering for titles
+            const renderedTitle = Utils.renderMarkdown(block.title);
+
             const innerContent = `
                 <div class="resize-handle resize-handle-top" draggable="false" style="${handleStyle}"></div>
                 <div class="timeblock-time">${Utils.formatTimeRange(block.start, block.end)}</div>
                 ${block.isTask 
                   ? `<div class="timeblock-content">
                        <input type="checkbox" class="timeblock-checkbox" ${block.checked ? 'checked' : ''}>
-                       <div class="timeblock-title">${Utils.escapeHtml(block.title)}</div>
+                       <div class="timeblock-title">${renderedTitle}</div>
                      </div>`
-                  : `<div class="timeblock-title">${Utils.escapeHtml(block.title)}</div>`
+                  : `<div class="timeblock-title">${renderedTitle}</div>`
                 }
                 <div class="resize-handle resize-handle-bottom" draggable="false" style="${handleStyle}"></div>
             `;
@@ -195,7 +197,8 @@ export const UI = {
             
             const text = document.createElement('span');
             text.className = 'unscheduled-text';
-            text.textContent = item.text;
+            // Use innerHTML to render markdown links
+            text.innerHTML = Utils.renderMarkdown(item.text);
 
             el.appendChild(checkbox);
             el.appendChild(text);

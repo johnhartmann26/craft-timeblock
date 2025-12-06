@@ -242,3 +242,15 @@
     border-radius: 12px;
   }
 }
+
+/* Embedded Links */
+.embedded-link {
+  color: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+  position: relative;
+  z-index: 10;
+}
+.embedded-link:hover {
+  opacity: 0.7;
+}

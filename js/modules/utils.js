@@ -50,6 +50,22 @@ export const Utils = {
         return div.innerHTML;
     },
 
+    // NEW: Parse [Link](URL) syntax safely
+    renderMarkdown(text) {
+        if (!text) return '';
+        // 1. Escape HTML first to prevent XSS (script injection)
+        let html = this.escapeHtml(text);
+        
+        // 2. Parse Markdown Links: [Title](URL)
+        html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (match, title, url) => {
+            // draggable="false" prevents dragging the link itself
+            // onclick="event.stopPropagation()" prevents triggering block selection/drag
+            return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="embedded-link" draggable="false" onclick="event.stopPropagation()">${title}</a>`;
+        });
+        
+        return html;
+    },
+
     hexToRgba(hex, alpha) {
         const r = parseInt(hex.slice(1, 3), 16);
         const g = parseInt(hex.slice(3, 5), 16);
@@ -222,10 +238,8 @@ export const Utils = {
             if (block.children) block.children.forEach(processBlock);
         };
 
-        // Handle different API return shapes
         if (typeof data === 'string') {
-            // Very basic XML fallback if needed, or error
-             // (Skipping XML parser for brevity as JSON is standard for Craft API now)
+            // fallback
         } else if (Array.isArray(data)) {
             data.forEach(processBlock);
         } else if (data.blocks) {

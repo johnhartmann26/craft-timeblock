@@ -52,10 +52,6 @@
   gap: 0.25rem;
 }
 
-#sidebar-toggle-btn {
-  display: none; /* Hidden on mobile */
-}
-
 /* =========================================================
    RESPONSIVE LAYOUT (Grid & Sidebar)
    ========================================================= */
@@ -66,17 +62,66 @@
   flex-direction: column;
 }
 
+/* On Mobile, sidebar is an OVERLAY (Drawer) */
 .tasks-sidebar {
-  display: flex;
-  flex-direction: column;
-  min-height: 50px;
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 85%; /* Leave a sliver of context */
+  max-width: 360px;
+  background: var(--bg-color);
+  z-index: 200; /* Above Header */
+  padding: 1rem;
+  padding-top: 5rem; /* Space for close button if needed, or just visual buffer */
+  box-shadow: -4px 0 20px rgba(0,0,0,0.2);
+  transition: transform 0.3s cubic-bezier(0.2, 0, 0, 1);
+  transform: translateX(0);
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+}
+
+/* Hidden state on mobile (Slide out) */
+.app-layout.sidebar-closed .tasks-sidebar {
+  transform: translateX(100%);
+  display: block !important; /* Override 'none' to allow transition, but we rely on transform */
+}
+
+/* Add a backdrop when sidebar is open on mobile */
+.app-layout::after {
+  content: '';
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 150;
+  opacity: 0; pointer-events: none; transition: opacity 0.3s;
+  backdrop-filter: blur(4px);
+}
+/* Show backdrop when sidebar is OPEN (not closed) */
+.app-layout:not(.sidebar-closed)::after {
+  opacity: 1; pointer-events: auto;
 }
 
 /* Desktop (Wide Screens) */
 @media (min-width: 900px) {
-  /* Show sidebar toggle */
-  #sidebar-toggle-btn {
-    display: flex;
+  /* Reset Overlay Styles */
+  .app-layout::after { display: none; }
+  
+  .tasks-sidebar {
+    position: sticky;
+    top: calc(1rem + 80px);
+    right: auto; bottom: auto;
+    width: auto; max-width: none;
+    background: transparent;
+    z-index: auto;
+    padding: 0 1rem;
+    box-shadow: none;
+    transform: none;
+    border-left: none;
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+  }
+  
+  .app-layout.sidebar-closed .tasks-sidebar {
+    display: none !important;
+    transform: none;
   }
 
   /* Expand Container */
@@ -99,38 +144,14 @@
     grid-template-columns: 1fr;
     gap: 0;
   }
-  .app-layout.sidebar-closed .tasks-sidebar {
-    display: none;
-  }
-
-  /* Sticky Sidebar */
-  .tasks-sidebar {
-    position: sticky;
-    top: calc(1rem + 80px);
-    max-height: calc(100vh - 100px);
-    overflow-y: auto;
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-    padding: 0 1rem; /* Padding added to prevent touching edges */
-  }
-  .tasks-sidebar::-webkit-scrollbar { display: none; }
-  
-  /* Reset Mobile Margins for Sidebar Sections */
-  /* Note: .unscheduled styles are in timeline.css, but layout adjustments are here */
-  .unscheduled {
-    margin-top: 0;
-    padding-top: 0;
-    border-top: none;
-    margin-bottom: 2rem;
-  }
 
   /* Sticky Section Headers (Unscheduled / Done) */
   .unscheduled h2 {
     position: sticky;
     top: 0;
-    background: var(--glass-bg); /* Use glass background */
+    background: var(--glass-bg);
     z-index: 10;
-    padding: 0.5rem 0.75rem; /* Padding added for text breathing room */
+    padding: 0.5rem 0.75rem;
     margin-bottom: 0.5rem;
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
